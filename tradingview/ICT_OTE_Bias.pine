@@ -58,13 +58,16 @@ COL_RISK  = color.new(#FF6F00, 0)
 // ─── TREND LOGIK (Structure) ──────────────────────────────────────────────────
 
 f_structure(lb) =>
-    ph = ta.highestbars(high, lb)
-    pl = ta.lowestbars(low, lb)
-    hh = high[ph+1] < high[ph] or high > high[ph+1]
-    hl = low[pl+1]  < low[pl]  or low  > low[pl+1]
-    ll = low[pl+1]  > low[pl]
-    lh = high[ph+1] > high[ph]
-    hh and hl ? 1 : ll and lh ? -1 : 0
+    if bar_index < lb + 2
+        0
+    else
+        ph = -ta.highestbars(high, lb)
+        pl = -ta.lowestbars(low, lb)
+        hh = high[ph + 1] < high[ph] or high > high[ph + 1]
+        hl = low[pl + 1]  < low[pl]  or low  > low[pl  + 1]
+        ll = low[pl + 1]  > low[pl]
+        lh = high[ph + 1] > high[ph]
+        hh and hl ? 1 : ll and lh ? -1 : 0
 
 trend_cur = f_structure(10)
 trend_d   = request.security(syminfo.tickerid, "D",   f_structure(10), lookahead=barmerge.lookahead_off)
