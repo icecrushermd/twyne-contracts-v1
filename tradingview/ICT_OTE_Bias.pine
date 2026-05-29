@@ -114,10 +114,8 @@ fib_1618 = not na(swing_range) ? last_swL + swing_range * 1.618 : float(na)  // 
 
 // OTE Zone: für bullish = 0.618–0.79 (Retracement tief zurück in Discount)
 //           für bearish  = 1 - 0.79 bis 1 - 0.618 (= 0.21–0.382 vom Low aus)
-ote_top = trend_cur == 1  ? fib_79   :
-          trend_cur == -1 ? fib_382  : float(na)
-ote_bot = trend_cur == 1  ? fib_618  :
-          trend_cur == -1 ? fib_236  : float(na)
+ote_top = trend_cur == 1 ? fib_79  : trend_cur == -1 ? fib_382 : float(na)
+ote_bot = trend_cur == 1 ? fib_618 : trend_cur == -1 ? fib_236 : float(na)
 
 // ─── CHART: PREMIUM / DISCOUNT HINTERGRUND ───────────────────────────────────
 
@@ -167,13 +165,11 @@ if not na(swH_r)
 if not na(swL_r)
     sl_swL := swL_r
 
-stop_price = trend_cur == 1  and not na(sl_swL) ? sl_swL - atr_buf_r * atr_r :
-             trend_cur == -1 and not na(sl_swH) ? sl_swH + atr_buf_r * atr_r : float(na)
+stop_price    = trend_cur == 1 and not na(sl_swL) ? sl_swL - atr_buf_r * atr_r : trend_cur == -1 and not na(sl_swH) ? sl_swH + atr_buf_r * atr_r : float(na)
 
 // Measured Move als Target
 swing_range_r = not na(sl_swH) and not na(sl_swL) ? sl_swH - sl_swL : float(na)
-mm_target_r   = trend_cur == 1  and not na(swing_range_r) ? sl_swH + swing_range_r :
-                trend_cur == -1 and not na(swing_range_r) ? sl_swL - swing_range_r : float(na)
+mm_target_r   = trend_cur == 1 and not na(swing_range_r) ? sl_swH + swing_range_r : trend_cur == -1 and not na(swing_range_r) ? sl_swL - swing_range_r : float(na)
 
 // ─── BIAS BERECHNUNG ─────────────────────────────────────────────────────────
 
@@ -190,13 +186,8 @@ bias_score += close > pdh ? 1.0 : close < pdl ? -1.0 : 0.0
 in_ote = not na(ote_top) and not na(ote_bot) and close >= math.min(ote_top, ote_bot) and close <= math.max(ote_top, ote_bot)
 
 // Bias-Label
-bias_str  = bias_score >=  3.0 ? "▲▲ STRONG LONG"  :
-            bias_score >=  1.0 ? "▲  LONG BIAS"     :
-            bias_score <= -3.0 ? "▼▼ STRONG SHORT"  :
-            bias_score <= -1.0 ? "▼  SHORT BIAS"     :
-            "●  NEUTRAL"
-bias_col  = bias_score >=  1.0 ? COL_BULL :
-            bias_score <= -1.0 ? COL_BEAR  : COL_NEUT
+bias_str  = bias_score >= 3.0 ? "▲▲ STRONG LONG" : bias_score >= 1.0 ? "▲  LONG BIAS" : bias_score <= -3.0 ? "▼▼ STRONG SHORT" : bias_score <= -1.0 ? "▼  SHORT BIAS" : "●  NEUTRAL"
+bias_col  = bias_score >= 1.0 ? COL_BULL : bias_score <= -1.0 ? COL_BEAR : COL_NEUT
 
 pd_pos_str = close > pdh ? "▲ über PDH" : close < pdl ? "▼ unter PDL" : "● zwischen PDH/PDL"
 pd_pos_col = close > pdh ? COL_BULL : close < pdl ? COL_BEAR : COL_NEUT

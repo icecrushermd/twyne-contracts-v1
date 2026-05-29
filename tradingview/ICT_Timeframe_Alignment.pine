@@ -134,9 +134,7 @@ delta_sum = math.sum(delta, dom_len)
 vol_sum   = math.sum(volume, dom_len)
 dom_pct   = vol_sum > 0 ? delta_sum / vol_sum * 100.0 : 0.0
 
-dom_str = dom_pct >  20.0 ? "▲ Käufer  +" + str.tostring(math.round(dom_pct)) + "%" :
-          dom_pct < -20.0 ? "▼ Verkäufer " + str.tostring(math.round(dom_pct)) + "%" :
-          "● Ausgeglichen"
+dom_str = dom_pct > 20.0 ? "▲ Käufer  +" + str.tostring(math.round(dom_pct)) + "%" : dom_pct < -20.0 ? "▼ Verkäufer " + str.tostring(math.round(dom_pct)) + "%" : "● Ausgeglichen"
 dom_col = dom_pct >  20.0 ? COL_BULL : dom_pct < -20.0 ? COL_BEAR : COL_NEUT
 
 // ─── EQUAL HIGHS / EQUAL LOWS (Liquiditätspools) ─────────────────────────────

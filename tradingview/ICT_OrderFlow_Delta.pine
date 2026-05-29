@@ -97,9 +97,7 @@ plot(dom_pct, "Dominanz %",
 // ─── LABEL AUF LETZTEM BAR ───────────────────────────────────────────────────
 
 if barstate.islast
-    dom_str = dom_pct >  20 ? "Käufer +" + str.tostring(math.round(dom_pct)) + "%" :
-              dom_pct < -20 ? "Verkäufer " + str.tostring(math.round(dom_pct)) + "%" :
-              "Ausgeglichen (" + str.tostring(math.round(dom_pct)) + "%)"
+    dom_str = dom_pct > 20 ? "Käufer +" + str.tostring(math.round(dom_pct)) + "%" : dom_pct < -20 ? "Verkäufer " + str.tostring(math.round(dom_pct)) + "%" : "Ausgeglichen (" + str.tostring(math.round(dom_pct)) + "%)"
     dom_col = dom_pct >  20 ? COL_BUY : dom_pct < -20 ? COL_SELL : COL_NEUT
 
     label.new(bar_index, smooth_delta, "  " + dom_str,
