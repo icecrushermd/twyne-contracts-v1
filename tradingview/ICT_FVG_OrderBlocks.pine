@@ -1,10 +1,12 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0
-// ICT Fair Value Gaps + Order Blocks
-// FVG:  3-Kerzen-Imbalanz wo Preis eine Lücke hinterlässt und später zurückkehrt
-// OB:   Letzte Gegen-Kerze vor einem Impuls — institutionelle Einstiegszone
+// ICT Fair Value Gaps + Order Blocks + Displacement + Breaker Blocks
+// FVG        : 3-Kerzen-Imbalanz — Preis kehrt zurück um sie zu füllen
+// OB         : Letzte Gegen-Kerze vor einem Impuls — institutionelle Einstiegszone
+// Displacement: Große Impulskerzen die institutionelle Aktivität signalisieren
+// Breaker    : Gescheiterter OB der seine Polarität wechselt (Support → Widerstand)
 
 //@version=5
-indicator("ICT FVG + Order Blocks", shortTitle="ICT FVG+OB", overlay=true)
+indicator("ICT FVG + OB + Breaker", shortTitle="ICT FVG+OB", overlay=true)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,20 @@ max_ob       = input.int(5,      "Max. aktive OBs pro Seite",   group=grp_ob, mi
 col_bull_ob  = input.color(color.new(#1B5E20, 75), "Bullish OB Farbe",  group=grp_ob)
 col_bear_ob  = input.color(color.new(#B71C1C, 75), "Bearish OB Farbe",  group=grp_ob)
 col_mit_ob   = input.color(color.new(#37474F, 90), "OB Mitigiert",      group=grp_ob)
+
+grp_brk      = "Breaker Blocks"
+show_brk     = input.bool(true, "Breaker Blocks anzeigen",  group=grp_brk,
+               tooltip="Gescheiterter OB wechselt Polarität — ehem. Support wird Widerstand und umgekehrt")
+col_bull_brk = input.color(color.new(#00BCD4, 75), "Bullish Breaker Farbe", group=grp_brk)
+col_bear_brk = input.color(color.new(#FF6F00, 75), "Bearish Breaker Farbe", group=grp_brk)
+
+grp_dis      = "Displacement Kerzen"
+show_dis     = input.bool(true,  "Displacement markieren",        group=grp_dis,
+               tooltip="Sehr große Impulskerzen (> ATR × Multiplikator) zeigen institutionelle Aktivität an")
+dis_mult     = input.float(2.0,  "ATR Multiplikator",             group=grp_dis, minval=1.0, step=0.5)
+dis_atr_len  = input.int(14,     "ATR Länge",                     group=grp_dis, minval=1)
+col_dis_bull = input.color(color.new(#00E676, 60), "Bullish Displacement", group=grp_dis)
+col_dis_bear = input.color(color.new(#FF1744, 60), "Bearish Displacement", group=grp_dis)
 
 // ─── FARBEN ──────────────────────────────────────────────────────────────────
 
@@ -168,17 +184,33 @@ if show_ob and barstate.isconfirmed
         if array.size(bear_ob) > max_ob
             box.delete(array.shift(bear_ob))
 
-// ── OB Mitigation: Preis kehrt in den OB zurück ───────────────────────────────
+// ── OB Mitigation → Breaker Block Konversion ─────────────────────────────────
+// Wenn Preis einen OB vollständig durchbricht (schließt durch den Körper),
+// wird der OB zum Breaker Block mit umgekehrter Polarität.
+// Bullish OB → Bearish Breaker (war Support, jetzt Widerstand)
+// Bearish OB → Bullish Breaker (war Widerstand, jetzt Support)
+
+var box[] bull_brk = array.new<box>()
+var box[] bear_brk = array.new<box>()
 
 if show_ob and array.size(bull_ob) > 0
     for i = array.size(bull_ob) - 1 to 0
         b        = array.get(bull_ob, i)
         zone_top = box.get_top(b)
         zone_bot = box.get_bottom(b)
-        if low <= zone_top and close < zone_bot   // Preis schließt durch den OB
-            box.set_bgcolor(b, col_mit_ob)
-            box.set_border_color(b, color.new(#37474F, 60))
-            box.set_extend(b, extend.none)
+        if low <= zone_top and close < zone_bot
+            if show_brk
+                // OB wird zum Bearish Breaker
+                box.set_bgcolor(b, col_bear_brk)
+                box.set_border_color(b, color.new(#FF6F00, 30))
+                box.set_extend(b, extend.right)
+                label.new(bar_index, zone_top, " ↓ Breaker",
+                          color=color.new(#FF6F00, 60), textcolor=color.new(#FF6F00, 0),
+                          style=label.style_label_left, size=size.tiny)
+                array.push(bear_brk, b)
+            else
+                box.set_bgcolor(b, col_mit_ob)
+                box.set_extend(b, extend.none)
             array.remove(bull_ob, i)
 
 if show_ob and array.size(bear_ob) > 0
@@ -186,8 +218,57 @@ if show_ob and array.size(bear_ob) > 0
         b        = array.get(bear_ob, i)
         zone_top = box.get_top(b)
         zone_bot = box.get_bottom(b)
-        if high >= zone_bot and close > zone_top   // Preis schließt durch den OB
-            box.set_bgcolor(b, col_mit_ob)
-            box.set_border_color(b, color.new(#37474F, 60))
-            box.set_extend(b, extend.none)
+        if high >= zone_bot and close > zone_top
+            if show_brk
+                // OB wird zum Bullish Breaker
+                box.set_bgcolor(b, col_bull_brk)
+                box.set_border_color(b, color.new(#00BCD4, 30))
+                box.set_extend(b, extend.right)
+                label.new(bar_index, zone_bot, " ↑ Breaker",
+                          color=color.new(#00BCD4, 60), textcolor=color.new(#00BCD4, 0),
+                          style=label.style_label_left, size=size.tiny)
+                array.push(bull_brk, b)
+            else
+                box.set_bgcolor(b, col_mit_ob)
+                box.set_extend(b, extend.none)
             array.remove(bear_ob, i)
+
+// Breaker Mitigation: wenn Preis den Breaker erneut testet und durchbricht → inaktiv
+if show_brk and array.size(bear_brk) > 0
+    for i = array.size(bear_brk) - 1 to 0
+        b = array.get(bear_brk, i)
+        if close > box.get_top(b)
+            box.set_bgcolor(b, col_mit_ob)
+            box.set_extend(b, extend.none)
+            array.remove(bear_brk, i)
+
+if show_brk and array.size(bull_brk) > 0
+    for i = array.size(bull_brk) - 1 to 0
+        b = array.get(bull_brk, i)
+        if close < box.get_bottom(b)
+            box.set_bgcolor(b, col_mit_ob)
+            box.set_extend(b, extend.none)
+            array.remove(bull_brk, i)
+
+// ─── DISPLACEMENT KERZEN ──────────────────────────────────────────────────────
+// Große Impulskerzen (Körper > ATR × Multiplikator) = institutionelle Aktivität.
+// Werden als leuchtend gefärbte Bars hervorgehoben und signalisieren Trendrichtung.
+
+dis_atr   = ta.atr(dis_atr_len)
+dis_body  = math.abs(close - open)
+is_dis    = show_dis and dis_body >= dis_mult * dis_atr
+is_dis_bull = is_dis and close > open
+is_dis_bear = is_dis and close < open
+
+barcolor(is_dis_bull ? col_dis_bull : is_dis_bear ? col_dis_bear : na,
+         title="Displacement Kerze")
+
+// Label auf Displacement Kerzen
+if is_dis and barstate.isconfirmed
+    dis_lbl = is_dis_bull ? "⚡ BULL DISP" : "⚡ BEAR DISP"
+    dis_col = is_dis_bull ? color.new(#00E676, 0) : color.new(#FF1744, 0)
+    dis_y   = is_dis_bull ? low  : high
+    dis_sty = is_dis_bull ? label.style_label_up : label.style_label_down
+    label.new(bar_index, dis_y, dis_lbl,
+              color=color.new(dis_col, 70), textcolor=dis_col,
+              style=dis_sty, size=size.tiny)

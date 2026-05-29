@@ -1,0 +1,304 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// ICT OTE Fibonacci + Premium/Discount + Daily Bias + Risk Calculator
+// OTE  : Optimal Trade Entry Zone (0.618 – 0.79 Retracement)
+// P/D  : Premium (teuer) vs Discount (günstig) relativ zur aktuellen Swing-Range
+// Bias : Automatischer Tages-Bias aus HTF-Trend + PDH/PDL-Position
+// Risk : Positionsgröße-Rechner basierend auf Stop und Konto-Risiko
+
+//@version=5
+indicator("ICT OTE + Bias + Risk", shortTitle="ICT OTE", overlay=true)
+
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
+
+grp_ote      = "OTE Fibonacci"
+show_ote     = input.bool(true,  "OTE Zone anzeigen (0.618 – 0.79)", group=grp_ote)
+show_eq      = input.bool(true,  "Equilibrium (0.5) anzeigen",       group=grp_ote)
+show_ext_fib = input.bool(false, "Erweiterte Fib-Level (0.236 / 0.382 / 1.272 / 1.618)", group=grp_ote)
+piv_left     = input.int(10,  "Pivot Left  Bars", minval=3, group=grp_ote)
+piv_right    = input.int(10,  "Pivot Right Bars", minval=3, group=grp_ote)
+col_ote      = input.color(color.new(#FFD600, 78), "OTE Zone Farbe",       group=grp_ote)
+col_eq_line  = input.color(color.new(#78909C, 0),  "Equilibrium Farbe",    group=grp_ote)
+col_ext      = input.color(color.new(#90A4AE, 60), "Erweiterte Fib Farbe", group=grp_ote)
+
+grp_pd_zone  = "Premium / Discount"
+show_pd_zone = input.bool(true, "Premium / Discount Hintergrund", group=grp_pd_zone,
+               tooltip="Grün = Discount (unter 50% → Käufer bevorzugt)  Rot = Premium (über 50% → Verkäufer bevorzugt)")
+col_disc     = input.color(color.new(#00C853, 96), "Discount Farbe", group=grp_pd_zone)
+col_prem     = input.color(color.new(#D50000, 96), "Premium Farbe",  group=grp_pd_zone)
+
+grp_bias     = "Daily Bias"
+show_bias    = input.bool(true, "Tages-Bias Tabelle", group=grp_bias,
+               tooltip="Automatischer Bias aus Weekly/Daily/4H Trend + PDH/PDL Position")
+
+grp_risk     = "Risk / Position Size"
+show_risk    = input.bool(true,    "Risk-Rechner anzeigen",    group=grp_risk)
+account_size = input.float(10000,  "Kontostand ($)",           group=grp_risk, minval=1)
+risk_pct     = input.float(1.0,    "Risiko pro Trade (%)",     group=grp_risk, minval=0.1, step=0.1)
+atr_len_r    = input.int(14,       "ATR Länge (für Stop)",     group=grp_risk, minval=1)
+atr_buf_r    = input.float(0.5,    "ATR Buffer über/unter Swing", group=grp_risk, minval=0, step=0.1)
+piv_l_r      = input.int(5,        "Stop Pivot Left",  options=[3,5], group=grp_risk)
+piv_r_r      = input.int(5,        "Stop Pivot Right", options=[3,5], group=grp_risk)
+
+grp_vis      = "Display"
+tbl_pos      = input.string("Bottom Right", "Tabellen-Position",
+               options=["Top Right","Top Left","Bottom Right","Bottom Left","Top Center","Bottom Center"],
+               group=grp_vis)
+
+// ─── FARBEN ──────────────────────────────────────────────────────────────────
+
+COL_BULL  = color.new(#00C853, 0)
+COL_BEAR  = color.new(#D50000, 0)
+COL_NEUT  = color.new(#607D8B, 0)
+COL_BG    = color.new(#1E1E2E, 90)
+COL_HDR   = color.new(#2A2A3E, 80)
+COL_TEXT  = color.new(#E0E0E0, 0)
+COL_OTE_L = color.new(#FFD600, 0)
+COL_RISK  = color.new(#FF6F00, 0)
+
+// ─── TREND LOGIK (Structure) ──────────────────────────────────────────────────
+
+f_structure(lb) =>
+    ph = ta.highestbars(high, lb)
+    pl = ta.lowestbars(low, lb)
+    hh = high[ph+1] < high[ph] or high > high[ph+1]
+    hl = low[pl+1]  < low[pl]  or low  > low[pl+1]
+    ll = low[pl+1]  > low[pl]
+    lh = high[ph+1] > high[ph]
+    hh and hl ? 1 : ll and lh ? -1 : 0
+
+trend_cur = f_structure(10)
+trend_d   = request.security(syminfo.tickerid, "D",   f_structure(10), lookahead=barmerge.lookahead_off)
+trend_w   = request.security(syminfo.tickerid, "W",   f_structure(10), lookahead=barmerge.lookahead_off)
+trend_4h  = request.security(syminfo.tickerid, "240", f_structure(10), lookahead=barmerge.lookahead_off)
+
+pdh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+
+// ─── SWING DETECTION (für OTE und Stop) ──────────────────────────────────────
+
+swH_ote = ta.pivothigh(high, piv_left, piv_right)
+swL_ote = ta.pivotlow(low,   piv_left, piv_right)
+
+var float last_swH = na
+var float last_swL = na
+var int   last_swH_bar = na
+var int   last_swL_bar = na
+
+if not na(swH_ote)
+    last_swH     := swH_ote
+    last_swH_bar := bar_index - piv_right
+if not na(swL_ote)
+    last_swL     := swL_ote
+    last_swL_bar := bar_index - piv_right
+
+// ─── FIBONACCI LEVELS ────────────────────────────────────────────────────────
+// Bullish  (trend = 1): Retracement vom letzten High zurück in die Discount-Zone
+//   Fib zieht von SwingLow (0%) → SwingHigh (100%)
+//   OTE liegt bei 0.618–0.79 des Retracements (= 21%–38.2% der Gesamtrange vom High)
+// Bearish (trend = -1): Retracement vom letzten Low zurück in die Premium-Zone
+//   OTE liegt bei 0.618–0.79 des Retracements (= 21%–38.2% der Gesamtrange vom Low)
+
+swing_range  = not na(last_swH) and not na(last_swL) ? math.abs(last_swH - last_swL) : float(na)
+
+// Fib-Referenzpunkte (von SwingLow = 0% bis SwingHigh = 100% für bullish)
+fib_0    = last_swL                                   // 0%
+fib_100  = last_swH                                   // 100%
+fib_236  = not na(swing_range) ? last_swL + swing_range * 0.236 : float(na)
+fib_382  = not na(swing_range) ? last_swL + swing_range * 0.382 : float(na)
+fib_50   = not na(swing_range) ? last_swL + swing_range * 0.5   : float(na)  // Equilibrium
+fib_618  = not na(swing_range) ? last_swL + swing_range * 0.618 : float(na)
+fib_705  = not na(swing_range) ? last_swL + swing_range * 0.705 : float(na)
+fib_79   = not na(swing_range) ? last_swL + swing_range * 0.79  : float(na)
+fib_1272 = not na(swing_range) ? last_swL + swing_range * 1.272 : float(na)  // Extension
+fib_1618 = not na(swing_range) ? last_swL + swing_range * 1.618 : float(na)  // Extension
+
+// OTE Zone: für bullish = 0.618–0.79 (Retracement tief zurück in Discount)
+//           für bearish  = 1 - 0.79 bis 1 - 0.618 (= 0.21–0.382 vom Low aus)
+ote_top = trend_cur == 1  ? fib_79   :
+          trend_cur == -1 ? fib_382  : float(na)
+ote_bot = trend_cur == 1  ? fib_618  :
+          trend_cur == -1 ? fib_236  : float(na)
+
+// ─── CHART: PREMIUM / DISCOUNT HINTERGRUND ───────────────────────────────────
+
+in_discount = show_pd_zone and not na(fib_50) and close < fib_50
+in_premium  = show_pd_zone and not na(fib_50) and close > fib_50
+
+bgcolor(in_discount ? col_disc : in_premium ? col_prem : na, title="Premium/Discount")
+
+// ─── CHART: FIBONACCI PLOTS ──────────────────────────────────────────────────
+
+plot(show_ote ? ote_top : na, "OTE Oberkante (0.79 / 0.382)",
+     color=COL_OTE_L, linewidth=1, style=plot.style_linebr)
+plot(show_ote ? ote_bot : na, "OTE Unterkante (0.618 / 0.236)",
+     color=COL_OTE_L, linewidth=1, style=plot.style_linebr)
+
+plot(show_eq ? fib_50 : na, "Equilibrium 0.5",
+     color=col_eq_line, linewidth=1, style=plot.style_linebr)
+
+plot(show_ext_fib ? fib_236  : na, "Fib 0.236", color=col_ext, linewidth=1, style=plot.style_linebr)
+plot(show_ext_fib ? fib_382  : na, "Fib 0.382", color=col_ext, linewidth=1, style=plot.style_linebr)
+plot(show_ext_fib ? fib_1272 : na, "Fib 1.272", color=col_ext, linewidth=1, style=plot.style_linebr)
+plot(show_ext_fib ? fib_1618 : na, "Fib 1.618", color=col_ext, linewidth=1, style=plot.style_linebr)
+
+// OTE Zone als Füllung
+p_ote_top = plot(show_ote ? ote_top : na, display=display.none)
+p_ote_bot = plot(show_ote ? ote_bot : na, display=display.none)
+fill(p_ote_top, p_ote_bot, color=col_ote, title="OTE Zone Fill")
+
+// Label auf letztem Bar
+if show_ote and not na(ote_top) and barstate.islast
+    bias_txt = trend_cur == 1 ? "BUY OTE" : trend_cur == -1 ? "SELL OTE" : "OTE"
+    label.new(bar_index + 2, (ote_top + ote_bot) / 2, bias_txt,
+              color=color.new(COL_OTE_L, 70), textcolor=COL_OTE_L,
+              style=label.style_label_left, size=size.small)
+
+// ─── STOP LEVEL (intern für Risk-Rechner) ────────────────────────────────────
+
+atr_r = ta.atr(atr_len_r)
+
+swH_r = ta.pivothigh(high, piv_l_r, piv_r_r)
+swL_r = ta.pivotlow(low,  piv_l_r, piv_r_r)
+
+var float sl_swH = na
+var float sl_swL = na
+if not na(swH_r) => sl_swH := swH_r
+if not na(swL_r) => sl_swL := swL_r
+
+stop_price = trend_cur == 1  and not na(sl_swL) ? sl_swL - atr_buf_r * atr_r :
+             trend_cur == -1 and not na(sl_swH) ? sl_swH + atr_buf_r * atr_r : float(na)
+
+// Measured Move als Target
+swing_range_r = not na(sl_swH) and not na(sl_swL) ? sl_swH - sl_swL : float(na)
+mm_target_r   = trend_cur == 1  and not na(swing_range_r) ? sl_swH + swing_range_r :
+                trend_cur == -1 and not na(swing_range_r) ? sl_swL - swing_range_r : float(na)
+
+// ─── BIAS BERECHNUNG ─────────────────────────────────────────────────────────
+
+// Scoring: Weekly (+2), Daily (+1.5), 4H (+0.5), PDH/PDL-Position (+1 / -1)
+// Positiv = Bullish Bias, Negativ = Bearish Bias
+
+bias_score = 0.0
+bias_score += trend_w   * 2.0
+bias_score += trend_d   * 1.5
+bias_score += trend_4h  * 0.5
+bias_score += close > pdh ? 1.0 : close < pdl ? -1.0 : 0.0
+
+// Ob Preis in OTE Zone ist (optimaler Einstieg)
+in_ote = not na(ote_top) and not na(ote_bot) and close >= math.min(ote_top, ote_bot) and close <= math.max(ote_top, ote_bot)
+
+// Bias-Label
+bias_str  = bias_score >=  3.0 ? "▲▲ STRONG LONG"  :
+            bias_score >=  1.0 ? "▲  LONG BIAS"     :
+            bias_score <= -3.0 ? "▼▼ STRONG SHORT"  :
+            bias_score <= -1.0 ? "▼  SHORT BIAS"     :
+            "●  NEUTRAL"
+bias_col  = bias_score >=  1.0 ? COL_BULL :
+            bias_score <= -1.0 ? COL_BEAR  : COL_NEUT
+
+pd_pos_str = close > pdh ? "▲ über PDH" : close < pdl ? "▼ unter PDL" : "● zwischen PDH/PDL"
+pd_pos_col = close > pdh ? COL_BULL : close < pdl ? COL_BEAR : COL_NEUT
+
+// ─── TABELLE ─────────────────────────────────────────────────────────────────
+
+_pos(s) =>
+    switch s
+        "Top Right"     => position.top_right
+        "Top Left"      => position.top_left
+        "Bottom Right"  => position.bottom_right
+        "Bottom Left"   => position.bottom_left
+        "Top Center"    => position.top_center
+        => position.bottom_center
+
+f_col(t) => t == 1 ? COL_BULL : t == -1 ? COL_BEAR : COL_NEUT
+f_lbl(t) => t == 1 ? "▲ BULL" : t == -1 ? "▼ BEAR" : "● NEUT"
+
+var table tbl = na
+
+if barstate.islast
+
+    // Zeilenanzahl: Bias (6) + OTE info (3) + Risk (7) = 16 + 1 Header = 17
+    tbl := table.new(_pos(tbl_pos), 2, 17,
+             bgcolor=COL_BG, border_width=1,
+             border_color=color.new(#444466, 60),
+             frame_width=1, frame_color=color.new(#666688, 40))
+
+    int r = 0
+
+    // ── BIAS SECTION ──────────────────────────────────────────────────────────
+    table.cell(tbl, 0, r, "TAGES-BIAS",  text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, bias_str,      text_color=bias_col, bgcolor=COL_BG,  text_size=size.small)
+    r += 1
+
+    table.cell(tbl, 0, r, "Weekly",    text_color=COL_TEXT,       bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, f_lbl(trend_w), text_color=f_col(trend_w), bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "Daily",     text_color=COL_TEXT,       bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, f_lbl(trend_d), text_color=f_col(trend_d), bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "4H",        text_color=COL_TEXT,        bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, f_lbl(trend_4h), text_color=f_col(trend_4h), bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "PDH/PDL",   text_color=COL_TEXT,    bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, pd_pos_str,  text_color=pd_pos_col,  bgcolor=COL_BG,  text_size=size.small)
+    r += 1
+
+    // ── OTE SECTION ───────────────────────────────────────────────────────────
+    ote_hdr_col = in_ote ? color.new(COL_OTE_L, 0) : COL_TEXT
+    ote_hdr_txt = in_ote ? "OTE ZONE  ← HIER!" : "OTE ZONE"
+    table.cell(tbl, 0, r, ote_hdr_txt,   text_color=ote_hdr_col, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, "0.618–0.79",  text_color=COL_OTE_L,   bgcolor=COL_BG,  text_size=size.small)
+    r += 1
+    ote_top_str = not na(ote_top) ? str.tostring(ote_top, format.mintick) : "—"
+    ote_bot_str = not na(ote_bot) ? str.tostring(ote_bot, format.mintick) : "—"
+    table.cell(tbl, 0, r, "OTE Oberkante", text_color=COL_TEXT,  bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, ote_top_str,     text_color=COL_OTE_L, bgcolor=COL_BG,  text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "OTE Unterkante", text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, ote_bot_str,      text_color=COL_OTE_L, bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    eq_str = not na(fib_50) ? str.tostring(fib_50, format.mintick) : "—"
+    eq_side = not na(fib_50) ? (close > fib_50 ? "PREMIUM" : "DISCOUNT") : "—"
+    eq_col  = not na(fib_50) ? (close > fib_50 ? COL_BEAR : COL_BULL) : COL_NEUT
+    table.cell(tbl, 0, r, "Equilibrium 0.5", text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, eq_str + "  " + eq_side, text_color=eq_col, bgcolor=COL_BG, text_size=size.small)
+    r += 1
+
+    // ── RISK SECTION ──────────────────────────────────────────────────────────
+    table.cell(tbl, 0, r, "RISK RECHNER", text_color=COL_RISK, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, "─────────",    text_color=COL_RISK, bgcolor=COL_HDR, text_size=size.small)
+    r += 1
+
+    entry_p    = close
+    dollar_risk = account_size * risk_pct / 100.0
+    stop_dist   = not na(stop_price) ? math.abs(entry_p - stop_price) : float(na)
+    pos_size    = not na(stop_dist) and stop_dist > 0 ? math.round(dollar_risk / stop_dist) : float(na)
+    rr_ratio    = not na(mm_target_r) and not na(stop_dist) and stop_dist > 0 ?
+                  math.abs(mm_target_r - entry_p) / stop_dist : float(na)
+
+    risk_dollar_str = "$" + str.tostring(math.round(dollar_risk))
+    entry_str       = str.tostring(entry_p, format.mintick)
+    stop_str        = not na(stop_price) ? str.tostring(stop_price, format.mintick) : "—"
+    pos_str         = not na(pos_size)   ? str.tostring(pos_size) + " Einheiten" : "—"
+    rr_str          = not na(rr_ratio)   ? str.tostring(rr_ratio, "#.##") + " : 1" : "—"
+    target_str      = not na(mm_target_r) ? str.tostring(mm_target_r, format.mintick) : "—"
+
+    table.cell(tbl, 0, r, "Konto / Risiko",  text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, "$" + str.tostring(math.round(account_size)) + "  " + str.tostring(risk_pct) + "% = " + risk_dollar_str,
+               text_color=COL_RISK, bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "Entry / Stop",   text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, entry_str + " / " + stop_str, text_color=COL_RISK, bgcolor=COL_BG, text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "Position Size",  text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, pos_str,          text_color=COL_RISK, bgcolor=COL_BG,  text_size=size.small)
+    r += 1
+    table.cell(tbl, 0, r, "MM Target / R:R", text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, target_str + "  (" + rr_str + ")", text_color=COL_RISK, bgcolor=COL_BG, text_size=size.small)
+    r += 1
+
+    // R:R Bewertung
+    rr_quality = not na(rr_ratio) ? (rr_ratio >= 3.0 ? "★★★ Sehr gut" : rr_ratio >= 2.0 ? "★★  Gut" : rr_ratio >= 1.5 ? "★   Akzeptabel" : "✗   Zu niedrig") : "—"
+    rr_q_col   = not na(rr_ratio) ? (rr_ratio >= 3.0 ? COL_BULL : rr_ratio >= 2.0 ? color.new(#76FF03,0) : rr_ratio >= 1.5 ? color.new(#FFD600,0) : COL_BEAR) : COL_NEUT
+    table.cell(tbl, 0, r, "R:R Bewertung", text_color=COL_TEXT, bgcolor=COL_HDR, text_size=size.small)
+    table.cell(tbl, 1, r, rr_quality,      text_color=rr_q_col, bgcolor=COL_BG,  text_size=size.small)
