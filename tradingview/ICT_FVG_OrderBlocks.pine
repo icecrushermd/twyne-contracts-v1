@@ -51,8 +51,10 @@ COL_BEAR = color.new(#D50000, 0)
 // Bearish FVG : high[0] < low[2]  (Lücke zwischen Bar-2-Low  und Bar-0-High)
 // Mitigation  : nur auf Bars NACH Erstellung prüfen (box.get_right < bar_index)
 
-var box[] bull_fvg = array.new<box>()
-var box[] bear_fvg = array.new<box>()
+var box[]  bull_fvg     = array.new<box>()
+var line[] bull_fvg_mid = array.new<line>()
+var box[]  bear_fvg     = array.new<box>()
+var line[] bear_fvg_mid = array.new<line>()
 
 if show_fvg and barstate.isconfirmed
     bar_rng     = high - low
@@ -66,15 +68,17 @@ if show_fvg and barstate.isconfirmed
         b   = box.new(left=bar_index - 2, top=ft, right=bar_index + 1, bottom=fb,
                       bgcolor=col_bull_fvg, border_color=color.new(COL_BULL, 40),
                       border_width=1, extend=extend.right)
-        if show_fvg_mid
-            line.new(x1=bar_index - 2, y1=mid, x2=bar_index + 1, y2=mid,
-                     color=color.new(COL_BULL, 50), style=line.style_dotted, extend=extend.right)
+        ml  = show_fvg_mid ?
+              line.new(x1=bar_index - 2, y1=mid, x2=bar_index + 1, y2=mid,
+                       color=color.new(COL_BULL, 50), style=line.style_dotted, extend=extend.right) : na
         label.new(x=bar_index, y=ft, text=" FVG",
                   color=color.new(COL_BULL, 70), textcolor=COL_BULL,
                   style=label.style_label_left, size=size.tiny)
         array.push(bull_fvg, b)
+        array.push(bull_fvg_mid, ml)
         if array.size(bull_fvg) > max_fvg
             box.delete(array.shift(bull_fvg))
+            line.delete(array.shift(bull_fvg_mid))
 
     // Bearish FVG
     ft2 = low[2]
@@ -84,34 +88,45 @@ if show_fvg and barstate.isconfirmed
         b2   = box.new(left=bar_index - 2, top=ft2, right=bar_index + 1, bottom=fb2,
                        bgcolor=col_bear_fvg, border_color=color.new(COL_BEAR, 40),
                        border_width=1, extend=extend.right)
-        if show_fvg_mid
-            line.new(x1=bar_index - 2, y1=mid2, x2=bar_index + 1, y2=mid2,
-                     color=color.new(COL_BEAR, 50), style=line.style_dotted, extend=extend.right)
+        ml2  = show_fvg_mid ?
+               line.new(x1=bar_index - 2, y1=mid2, x2=bar_index + 1, y2=mid2,
+                        color=color.new(COL_BEAR, 50), style=line.style_dotted, extend=extend.right) : na
         label.new(x=bar_index, y=ft2, text=" FVG",
                   color=color.new(COL_BEAR, 70), textcolor=COL_BEAR,
                   style=label.style_label_left, size=size.tiny)
         array.push(bear_fvg, b2)
+        array.push(bear_fvg_mid, ml2)
         if array.size(bear_fvg) > max_fvg
             box.delete(array.shift(bear_fvg))
+            line.delete(array.shift(bear_fvg_mid))
 
 // Mitigation: box.get_right(b) < bar_index verhindert Same-Bar-Mitigation
+// Box + Mittellinie werden synchron gestoppt (extend.none) und grau eingefärbt
 if show_fvg and array.size(bull_fvg) > 0
     for i = array.size(bull_fvg) - 1 to 0
-        b = array.get(bull_fvg, i)
+        b  = array.get(bull_fvg, i)
+        ml = array.get(bull_fvg_mid, i)
         if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
+            if not na(ml)
+                line.set_extend(ml, extend.none)
             array.remove(bull_fvg, i)
+            array.remove(bull_fvg_mid, i)
 
 if show_fvg and array.size(bear_fvg) > 0
     for i = array.size(bear_fvg) - 1 to 0
-        b = array.get(bear_fvg, i)
+        b  = array.get(bear_fvg, i)
+        ml = array.get(bear_fvg_mid, i)
         if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
+            if not na(ml)
+                line.set_extend(ml, extend.none)
             array.remove(bear_fvg, i)
+            array.remove(bear_fvg_mid, i)
 
 // ─── ORDER BLOCKS ─────────────────────────────────────────────────────────────
 // Impulsdurchbruch + vorherige Gegen-Kerze mit Mindestkörper = Order Block
