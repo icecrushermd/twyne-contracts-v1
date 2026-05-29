@@ -1,46 +1,54 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0
-// ICT Timeframe Alignment Indicator
-// Shows trend direction across multiple timeframes (ICT methodology)
-// Displays: Monthly / Weekly / Daily / 4H / 1H / 15m / current TF
+// ICT Timeframe Alignment + Dynamic Stop Indicator
+// Shows trend direction across multiple timeframes and suggests stop placement
+// based on the last confirmed swing structure (ICT methodology)
 
 //@version=5
-indicator("ICT Timeframe Alignment", shorttitle="ICT TFA", overlay=false)
+indicator("ICT TFA + Dynamic Stop", shortTitle="ICT TFA+SL", overlay=true)
 
-// ─── INPUTS ─────────────────────────────────────────────────────────────────
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
 
-grp_method = "Trend Method"
-method     = input.string("Structure", "Trend Detection",  options=["EMA", "Structure"], group=grp_method)
-ema_fast   = input.int(20,  "Fast EMA", minval=1, group=grp_method)
-ema_slow   = input.int(50,  "Slow EMA", minval=1, group=grp_method)
-lookback   = input.int(10,  "Structure Lookback (bars)", minval=3, group=grp_method)
+grp_method  = "Trend Method"
+method      = input.string("Structure", "Trend Detection", options=["EMA","Structure"], group=grp_method)
+ema_fast    = input.int(20,  "Fast EMA",           minval=1,   group=grp_method)
+ema_slow    = input.int(50,  "Slow EMA",            minval=1,   group=grp_method)
+lookback    = input.int(10,  "Structure Lookback",  minval=3,   group=grp_method)
 
-grp_tf     = "Timeframes"
-show_m     = input.bool(true,  "Monthly",  group=grp_tf)
-show_w     = input.bool(true,  "Weekly",   group=grp_tf)
-show_d     = input.bool(true,  "Daily",    group=grp_tf)
-show_4h    = input.bool(true,  "4H",       group=grp_tf)
-show_1h    = input.bool(true,  "1H",       group=grp_tf)
-show_15    = input.bool(true,  "15m",      group=grp_tf)
-show_cur   = input.bool(true,  "Current TF", group=grp_tf)
+grp_stop    = "Dynamic Stop"
+piv_left    = input.int(5,    "Pivot Left Bars",   minval=1,         group=grp_stop)
+piv_right   = input.int(5,    "Pivot Right Bars",  minval=1,         group=grp_stop)
+atr_len     = input.int(14,   "ATR Length",        minval=1,         group=grp_stop)
+atr_buf     = input.float(0.5,"ATR Buffer",        minval=0.0, step=0.1, group=grp_stop,
+              tooltip="Extra distance below/above pivot in ATR units")
+show_stop   = input.bool(true,  "Show Stop Line",     group=grp_stop)
+show_swings = input.bool(true,  "Show Swing Markers", group=grp_stop)
 
-grp_vis    = "Display"
-tbl_pos    = input.string("Top Right", "Table Position",
-             options=["Top Right","Top Left","Bottom Right","Bottom Left","Top Center","Bottom Center"],
-             group=grp_vis)
-show_dots  = input.bool(true, "Show Dot on Chart", group=grp_vis)
+grp_tf      = "Timeframes"
+show_m      = input.bool(true,  "Monthly",    group=grp_tf)
+show_w      = input.bool(true,  "Weekly",     group=grp_tf)
+show_d      = input.bool(true,  "Daily",      group=grp_tf)
+show_4h     = input.bool(true,  "4H",         group=grp_tf)
+show_1h     = input.bool(true,  "1H",         group=grp_tf)
+show_15     = input.bool(true,  "15m",        group=grp_tf)
+show_cur    = input.bool(true,  "Current TF", group=grp_tf)
 
-// ─── COLOURS ────────────────────────────────────────────────────────────────
+grp_vis     = "Display"
+tbl_pos     = input.string("Top Right", "Table Position",
+              options=["Top Right","Top Left","Bottom Right","Bottom Left","Top Center","Bottom Center"],
+              group=grp_vis)
 
-COL_BULL   = color.new(#00C853, 0)   // green
-COL_BEAR   = color.new(#D50000, 0)   // red
-COL_NEUT   = color.new(#607D8B, 0)   // grey
+// ─── COLOURS ─────────────────────────────────────────────────────────────────
+
+COL_BULL   = color.new(#00C853, 0)
+COL_BEAR   = color.new(#D50000, 0)
+COL_NEUT   = color.new(#607D8B, 0)
+COL_STOP   = color.new(#FF6F00, 0)
 COL_BG     = color.new(#1E1E2E, 90)
 COL_HEADER = color.new(#2A2A3E, 80)
 COL_TEXT   = color.new(#E0E0E0, 0)
 
-// ─── TREND LOGIC ────────────────────────────────────────────────────────────
+// ─── TREND LOGIC ─────────────────────────────────────────────────────────────
 
-// Returns: 1 = bullish, -1 = bearish, 0 = neutral
 f_trend_ema(fast, slow) =>
     f = ta.ema(close, fast)
     s = ta.ema(close, slow)
@@ -48,49 +56,90 @@ f_trend_ema(fast, slow) =>
 
 f_trend_structure(lb) =>
     ph = ta.highestbars(high, lb)
-    pl = ta.lowestbars(low,  lb)
-    // Higher high + higher low = bullish structure
+    pl = ta.lowestbars(low, lb)
     hh = high[ph + 1] < high[ph] or high > high[ph + 1]
-    hl = low [pl + 1] < low [pl] or low  > low [pl  + 1]
-    ll = low [pl + 1] > low [pl]
+    hl = low[pl + 1]  < low[pl]  or low  > low[pl  + 1]
+    ll = low[pl + 1]  > low[pl]
     lh = high[ph + 1] > high[ph]
     hh and hl ? 1 : ll and lh ? -1 : 0
 
 f_trend() =>
     method == "EMA" ? f_trend_ema(ema_fast, ema_slow) : f_trend_structure(lookback)
 
-// ─── MULTI-TF REQUESTS ──────────────────────────────────────────────────────
+// ─── MULTI-TF REQUESTS ───────────────────────────────────────────────────────
 
 trend_cur = f_trend()
+trend_m   = request.security(syminfo.tickerid, "M",   f_trend(), lookahead=barmerge.lookahead_off)
+trend_w   = request.security(syminfo.tickerid, "W",   f_trend(), lookahead=barmerge.lookahead_off)
+trend_d   = request.security(syminfo.tickerid, "D",   f_trend(), lookahead=barmerge.lookahead_off)
+trend_4h  = request.security(syminfo.tickerid, "240", f_trend(), lookahead=barmerge.lookahead_off)
+trend_1h  = request.security(syminfo.tickerid, "60",  f_trend(), lookahead=barmerge.lookahead_off)
+trend_15  = request.security(syminfo.tickerid, "15",  f_trend(), lookahead=barmerge.lookahead_off)
 
-trend_m  = request.security(syminfo.tickerid, "M",   f_trend(), lookahead=barmerge.lookahead_off)
-trend_w  = request.security(syminfo.tickerid, "W",   f_trend(), lookahead=barmerge.lookahead_off)
-trend_d  = request.security(syminfo.tickerid, "D",   f_trend(), lookahead=barmerge.lookahead_off)
-trend_4h = request.security(syminfo.tickerid, "240", f_trend(), lookahead=barmerge.lookahead_off)
-trend_1h = request.security(syminfo.tickerid, "60",  f_trend(), lookahead=barmerge.lookahead_off)
-trend_15 = request.security(syminfo.tickerid, "15",  f_trend(), lookahead=barmerge.lookahead_off)
+// ─── ALIGNMENT SCORE ─────────────────────────────────────────────────────────
 
-// ─── ALIGNMENT SCORE ────────────────────────────────────────────────────────
-// Counts active timeframes pointing in the same direction
+active_count = (show_m   ? 1 : 0) + (show_w  ? 1 : 0) + (show_d  ? 1 : 0) +
+               (show_4h  ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) +
+               (show_cur ? 1 : 0)
 
-var int active_count = 0
-var int bull_count   = 0
+bull_count   = (show_m   and trend_m   == 1 ? 1 : 0) +
+               (show_w   and trend_w   == 1 ? 1 : 0) +
+               (show_d   and trend_d   == 1 ? 1 : 0) +
+               (show_4h  and trend_4h  == 1 ? 1 : 0) +
+               (show_1h  and trend_1h  == 1 ? 1 : 0) +
+               (show_15  and trend_15  == 1 ? 1 : 0) +
+               (show_cur and trend_cur == 1 ? 1 : 0)
 
-if barstate.islast
-    active_count := 0
-    bull_count   := 0
-    int bear_count = 0
-    if show_m   => active_count += 1; if trend_m  == 1 => bull_count += 1; if trend_m  == -1 => bear_count += 1
-    if show_w   => active_count += 1; if trend_w  == 1 => bull_count += 1; if trend_w  == -1 => bear_count += 1
-    if show_d   => active_count += 1; if trend_d  == 1 => bull_count += 1; if trend_d  == -1 => bear_count += 1
-    if show_4h  => active_count += 1; if trend_4h == 1 => bull_count += 1; if trend_4h == -1 => bear_count += 1
-    if show_1h  => active_count += 1; if trend_1h == 1 => bull_count += 1; if trend_1h == -1 => bear_count += 1
-    if show_15  => active_count += 1; if trend_15 == 1 => bull_count += 1; if trend_15 == -1 => bear_count += 1
-    if show_cur => active_count += 1; if trend_cur== 1 => bull_count += 1; if trend_cur== -1 => bear_count += 1
+alignment_pct = active_count > 0 ? (bull_count / active_count) * 100.0 : 50.0
 
-alignment_pct = active_count > 0 ? (bull_count / active_count) * 100 : 50.0
+// ─── PIVOT / SWING DETECTION ─────────────────────────────────────────────────
 
-// ─── HELPER: trend label + colour ───────────────────────────────────────────
+atr_val = ta.atr(atr_len)
+
+swH = ta.pivothigh(high, piv_left, piv_right)
+swL = ta.pivotlow(low,  piv_left, piv_right)
+
+// Track most recent confirmed swing levels
+var float last_swH = na
+var float last_swL = na
+
+if not na(swH)
+    last_swH := swH
+if not na(swL)
+    last_swL := swL
+
+// ─── DYNAMIC STOP LEVEL ──────────────────────────────────────────────────────
+// Bullish  → stop below last Higher Low   (HL) minus ATR buffer
+// Bearish  → stop above last Lower  High  (LH) plus  ATR buffer
+// Neutral  → no stop suggested
+
+stop_level = float(na)
+if trend_cur == 1 and not na(last_swL)
+    stop_level := last_swL - atr_buf * atr_val
+else if trend_cur == -1 and not na(last_swH)
+    stop_level := last_swH + atr_buf * atr_val
+
+stop_dist_pct = not na(stop_level) ? math.abs(close - stop_level) / close * 100.0 : float(na)
+stop_dist_atr = not na(stop_level) ? math.abs(close - stop_level) / atr_val        : float(na)
+
+// ─── CHART VISUALS ───────────────────────────────────────────────────────────
+
+// Dynamic stop line
+plot(show_stop ? stop_level : na, "Dynamic Stop",
+     color=COL_STOP, linewidth=1, style=plot.style_linebr)
+
+// Swing high / low markers
+plotshape(show_swings and not na(swH), "Swing High", shape.triangledown,
+          location.abovebar, color.new(COL_BEAR, 20), size=size.tiny)
+plotshape(show_swings and not na(swL), "Swing Low",  shape.triangleup,
+          location.belowbar, color.new(COL_BULL, 20), size=size.tiny)
+
+// Subtle background tint for overall alignment bias
+bgcolor(alignment_pct >= 70 ? color.new(COL_BULL, 95) :
+        alignment_pct <= 30 ? color.new(COL_BEAR, 95) : na,
+        title="Alignment Background")
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 f_label(t) =>
     t == 1 ? "▲ BULL" : t == -1 ? "▼ BEAR" : "● NEUT"
@@ -98,95 +147,99 @@ f_label(t) =>
 f_col(t) =>
     t == 1 ? COL_BULL : t == -1 ? COL_BEAR : COL_NEUT
 
-// ─── TABLE POSITION ─────────────────────────────────────────────────────────
-
 _pos(s) =>
     switch s
-        "Top Right"     => position.top_right
-        "Top Left"      => position.top_left
-        "Bottom Right"  => position.bottom_right
-        "Bottom Left"   => position.bottom_left
-        "Top Center"    => position.top_center
+        "Top Right"    => position.top_right
+        "Top Left"     => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left"  => position.bottom_left
+        "Top Center"   => position.top_center
         => position.bottom_center
 
-// ─── BUILD TABLE ────────────────────────────────────────────────────────────
+// ─── TABLE ───────────────────────────────────────────────────────────────────
 
 var table tbl = na
 
 if barstate.islast
-    // Count rows needed
-    rows = 2  // header + alignment bar
-    if show_cur => rows += 1
-    if show_15  => rows += 1
-    if show_1h  => rows += 1
-    if show_4h  => rows += 1
-    if show_d   => rows += 1
-    if show_w   => rows += 1
+    int rows = 1  // header
     if show_m   => rows += 1
+    if show_w   => rows += 1
+    if show_d   => rows += 1
+    if show_4h  => rows += 1
+    if show_1h  => rows += 1
+    if show_15  => rows += 1
+    if show_cur => rows += 1
+    rows += 1  // alignment row
+    rows += 4  // stop: section header + price + dist% + dist ATR
 
     tbl := table.new(_pos(tbl_pos), 2, rows,
-         bgcolor       = COL_BG,
-         border_width  = 1,
-         border_color  = color.new(#444466, 60),
-         frame_width   = 1,
-         frame_color   = color.new(#666688, 40))
+         bgcolor=COL_BG, border_width=1,
+         border_color=color.new(#444466, 60),
+         frame_width=1, frame_color=color.new(#666688, 40))
 
-    // Header
-    table.cell(tbl, 0, 0, "TIMEFRAME",  text_color=COL_TEXT,  bgcolor=COL_HEADER, text_size=size.small)
-    table.cell(tbl, 1, 0, "TREND",      text_color=COL_TEXT,  bgcolor=COL_HEADER, text_size=size.small)
+    // Header row
+    table.cell(tbl, 0, 0, "TIMEFRAME", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, 0, "TREND",     text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
 
-    row = 1
+    int row = 1
+
     if show_m
-        table.cell(tbl, 0, row, "Monthly",  text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_m),  text_color=f_col(trend_m),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Monthly",      text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_m), text_color=f_col(trend_m), bgcolor=COL_BG,     text_size=size.small)
         row += 1
     if show_w
-        table.cell(tbl, 0, row, "Weekly",   text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_w),  text_color=f_col(trend_w),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Weekly",       text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_w), text_color=f_col(trend_w), bgcolor=COL_BG,     text_size=size.small)
         row += 1
     if show_d
-        table.cell(tbl, 0, row, "Daily",    text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_d),  text_color=f_col(trend_d),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Daily",        text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_d), text_color=f_col(trend_d), bgcolor=COL_BG,     text_size=size.small)
         row += 1
     if show_4h
-        table.cell(tbl, 0, row, "4H",       text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_4h), text_color=f_col(trend_4h), bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "4H",           text_color=COL_TEXT,         bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_4h), text_color=f_col(trend_4h), bgcolor=COL_BG,   text_size=size.small)
         row += 1
     if show_1h
-        table.cell(tbl, 0, row, "1H",       text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_1h), text_color=f_col(trend_1h), bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "1H",           text_color=COL_TEXT,         bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_1h), text_color=f_col(trend_1h), bgcolor=COL_BG,   text_size=size.small)
         row += 1
     if show_15
-        table.cell(tbl, 0, row, "15m",      text_color=COL_TEXT,        bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_15), text_color=f_col(trend_15), bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "15m",          text_color=COL_TEXT,         bgcolor=COL_HEADER, text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_15), text_color=f_col(trend_15), bgcolor=COL_BG,   text_size=size.small)
         row += 1
     if show_cur
-        cur_tf_label = "Current (" + timeframe.period + ")"
-        table.cell(tbl, 0, row, cur_tf_label,            text_color=COL_TEXT,         bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_cur), text_color=f_col(trend_cur), bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
+        table.cell(tbl, 0, row, "Current (" + timeframe.period + ")",
+                   text_color=COL_TEXT, bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_cur),
+                   text_color=f_col(trend_cur), bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
         row += 1
 
-    // Alignment score row
+    // Alignment summary
     aln_col   = alignment_pct >= 70 ? COL_BULL : alignment_pct <= 30 ? COL_BEAR : COL_NEUT
-    aln_label = "Alignment: " + str.tostring(math.round(alignment_pct)) + "%"
-    table.cell(tbl, 0, row, "ALIGNMENT",  text_color=COL_TEXT,  bgcolor=COL_HEADER, text_size=size.small)
-    table.cell(tbl, 1, row, aln_label,    text_color=aln_col,   bgcolor=COL_BG,     text_size=size.small)
+    aln_label = str.tostring(math.round(alignment_pct)) + "% aligned"
+    table.cell(tbl, 0, row, "ALIGNMENT", text_color=COL_TEXT,  bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, aln_label,   text_color=aln_col,   bgcolor=COL_BG,     text_size=size.small)
+    row += 1
 
-// ─── ALIGNMENT BAR (pane plot) ───────────────────────────────────────────────
+    // Stop section header — shows which structure level the stop references
+    stop_dir_lbl = trend_cur == 1 ? "STOP  ↓ below HL" : trend_cur == -1 ? "STOP  ↑ above LH" : "STOP  (no trend)"
+    table.cell(tbl, 0, row, stop_dir_lbl, text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, "─────────",  text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
+    row += 1
 
-plot(alignment_pct, title="Alignment %", color=alignment_pct >= 70 ? COL_BULL : alignment_pct <= 30 ? COL_BEAR : COL_NEUT, linewidth=2)
-hline(70, "Bullish Zone",  color=color.new(COL_BULL, 60), linestyle=hline.style_dashed)
-hline(50, "Neutral",       color=color.new(COL_NEUT, 60), linestyle=hline.style_dotted)
-hline(30, "Bearish Zone",  color=color.new(COL_BEAR, 60), linestyle=hline.style_dashed)
+    // Stop price
+    stop_price_str = not na(stop_level) ? str.tostring(stop_level, format.mintick) : "—"
+    table.cell(tbl, 0, row, "Price",        text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, stop_price_str, text_color=COL_STOP, bgcolor=COL_BG,     text_size=size.small)
+    row += 1
 
-bgcolor(alignment_pct >= 70 ? color.new(COL_BULL, 92) :
-        alignment_pct <= 30 ? color.new(COL_BEAR, 92) : na)
+    // Distance %
+    dist_pct_str = not na(stop_dist_pct) ? str.tostring(stop_dist_pct, "#.##") + " %" : "—"
+    table.cell(tbl, 0, row, "Abstand %",  text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, dist_pct_str, text_color=COL_STOP, bgcolor=COL_BG,     text_size=size.small)
+    row += 1
 
-// ─── DOT ON CHART (optional, separate overlay pane) ─────────────────────────
-// Because overlay=false, we use a label on the last bar instead
-if show_dots and barstate.islast
-    dot_col   = alignment_pct >= 70 ? COL_BULL : alignment_pct <= 30 ? COL_BEAR : COL_NEUT
-    dot_txt   = alignment_pct >= 70 ? "▲" : alignment_pct <= 30 ? "▼" : "●"
-    label.new(bar_index, alignment_pct, dot_txt,
-              color=color.new(dot_col, 70), textcolor=dot_col,
-              style=label.style_label_left, size=size.normal)
+    // Distance in ATR
+    dist_atr_str = not na(stop_dist_atr) ? str.tostring(stop_dist_atr, "#.##") + " ATR" : "—"
+    table.cell(tbl, 0, row, "Abstand ATR", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, dist_atr_str,  text_color=COL_STOP, bgcolor=COL_BG,     text_size=size.small)
