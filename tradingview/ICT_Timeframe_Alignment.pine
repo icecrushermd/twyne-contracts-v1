@@ -160,14 +160,15 @@ if not na(swL)
     last_swL := swL
 
 // ─── DYNAMIC STOP LEVEL ──────────────────────────────────────────────────────
-// Bullish  → stop below last Higher Low   (HL) minus ATR buffer
-// Bearish  → stop above last Lower  High  (LH) plus  ATR buffer
-// Neutral  → no stop suggested
+// Stop und MM-Ziel folgen dem HTF-Bias (Daily → Weekly → Current als Fallback)
+// so dass Signale mit der höheren Zeitrahmen-Struktur übereinstimmen.
+
+htf_bias = trend_d != 0 ? trend_d : trend_w != 0 ? trend_w : trend_cur
 
 stop_level = float(na)
-if trend_cur == 1 and not na(last_swL)
+if htf_bias == 1 and not na(last_swL)
     stop_level := last_swL - atr_buf * atr_val
-else if trend_cur == -1 and not na(last_swH)
+else if htf_bias == -1 and not na(last_swH)
     stop_level := last_swH + atr_buf * atr_val
 
 stop_dist_pct = not na(stop_level) ? math.abs(close - stop_level) / close * 100.0 : float(na)
@@ -182,9 +183,9 @@ swing_range = not na(last_swH) and not na(last_swL) ? last_swH - last_swL : floa
 
 mm_target = float(na)
 if show_mm and not na(swing_range)
-    if trend_cur == 1
+    if htf_bias == 1
         mm_target := last_swH + swing_range
-    else if trend_cur == -1
+    else if htf_bias == -1
         mm_target := last_swL - swing_range
 
 mm_dist_pct = not na(mm_target) ? math.abs(mm_target - close) / close * 100.0 : float(na)
@@ -208,7 +209,7 @@ plot(show_mm ? mm_target : na, "MM Ziel",
 
 // MM Ziel Label (nur auf letztem Bar)
 if show_mm and not na(mm_target) and barstate.islast
-    mm_lbl = (trend_cur == 1 ? "▲ MM " : "▼ MM ") + str.tostring(mm_target, format.mintick)
+    mm_lbl = (htf_bias == 1 ? "▲ MM " : "▼ MM ") + str.tostring(mm_target, format.mintick)
     label.new(bar_index, mm_target, mm_lbl,
               color=color.new(col_mm, 70), textcolor=col_mm,
               style=label.style_label_left, size=size.small)
@@ -358,7 +359,7 @@ if barstate.islast
     row += 1
 
     // Stop section header — shows which structure level the stop references
-    stop_dir_lbl = trend_cur == 1 ? "STOP  ↓ below HL" : trend_cur == -1 ? "STOP  ↑ above LH" : "STOP  (no trend)"
+    stop_dir_lbl = htf_bias == 1 ? "STOP  ↓ below HL" : htf_bias == -1 ? "STOP  ↑ above LH" : "STOP  (no trend)"
     table.cell(tbl, 0, row, stop_dir_lbl, text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, "─────────",  text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
     row += 1
@@ -382,7 +383,7 @@ if barstate.islast
     row += 1
 
     // Measured Move section header
-    mm_dir_lbl = trend_cur == 1 ? "MM ZIEL  ↑ (Long)" : trend_cur == -1 ? "MM ZIEL  ↓ (Short)" : "MM ZIEL"
+    mm_dir_lbl = htf_bias == 1 ? "MM ZIEL  ↑ (Long)" : htf_bias == -1 ? "MM ZIEL  ↓ (Short)" : "MM ZIEL"
     table.cell(tbl, 0, row, mm_dir_lbl, text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, "─────────", text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
     row += 1
