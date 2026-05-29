@@ -74,20 +74,18 @@ f_trend_ema(fast, slow) =>
     f > s ? 1 : f < s ? -1 : 0
 
 f_trend_structure(lb) =>
-    // Pivot-based HH/HL vs LL/LH detection — no dynamic indexing, no RE10008 risk
-    ph      = ta.pivothigh(high, lb, lb)
-    pl      = ta.pivotlow(low,  lb, lb)
-    is_ph   = not na(ph)
-    is_pl   = not na(pl)
-    sh_now  = ta.valuewhen(is_ph, ph, 0)
-    sh_prev = ta.valuewhen(is_ph, ph, 1)
-    sl_now  = ta.valuewhen(is_pl, pl, 0)
-    sl_prev = ta.valuewhen(is_pl, pl, 1)
-    hh = not na(sh_now) and not na(sh_prev) and sh_now > sh_prev
-    hl = not na(sl_now) and not na(sl_prev) and sl_now > sl_prev
-    ll = not na(sl_now) and not na(sl_prev) and sl_now < sl_prev
-    lh = not na(sh_now) and not na(sh_prev) and sh_now < sh_prev
-    hh and hl ? 1 : ll and lh ? -1 : 0
+    // Range-comparison structure: current lb-window vs prior lb-window
+    // Works reliably in all request.security() contexts — no ta.valuewhen needed
+    if bar_index < lb * 2
+        0
+    else
+        rh = ta.highest(high,     lb)
+        rl = ta.lowest(low,       lb)
+        ph = ta.highest(high[lb], lb)
+        pl = ta.lowest(low[lb],   lb)
+        bull = rh > ph and rl > pl
+        bear = rl < pl and rh < ph
+        bull ? 1 : bear ? -1 : 0
 
 f_trend() =>
     method == "EMA" ? f_trend_ema(ema_fast, ema_slow) : f_trend_structure(lookback)
