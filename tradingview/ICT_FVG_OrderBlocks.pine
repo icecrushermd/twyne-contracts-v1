@@ -1,9 +1,5 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0
 // ICT Fair Value Gaps + Order Blocks + Displacement + Breaker Blocks
-// FVG        : 3-Kerzen-Imbalanz — Preis kehrt zurück um sie zu füllen
-// OB         : Letzte Gegen-Kerze vor einem Impuls — institutionelle Einstiegszone
-// Displacement: Große Impulskerzen die institutionelle Aktivität signalisieren
-// Breaker    : Gescheiterter OB der seine Polarität wechselt (Support → Widerstand)
 
 //@version=6
 indicator("ICT FVG + OB + Breaker", shorttitle="ICT FVG+OB", overlay=true)
@@ -11,39 +7,39 @@ indicator("ICT FVG + OB + Breaker", shorttitle="ICT FVG+OB", overlay=true)
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 
 grp_fvg      = "Fair Value Gaps"
-show_fvg     = input.bool(true,  "FVG anzeigen",                group=grp_fvg)
-fvg_min_size = input.float(0.0,  "Min. FVG Größe (% Range)",    group=grp_fvg, minval=0, step=0.1,
+show_fvg     = input.bool(true,  "FVG anzeigen",               group=grp_fvg)
+fvg_min_size = input.float(0.0,  "Min. FVG Größe (% Range)",   group=grp_fvg, minval=0, step=0.1,
                tooltip="0 = alle FVGs. Höher = nur signifikante Imbalanzen")
-max_fvg      = input.int(10,     "Max. aktive FVGs pro Seite",  group=grp_fvg, minval=1, maxval=20)
+max_fvg      = input.int(10,     "Max. aktive FVGs pro Seite", group=grp_fvg, minval=1, maxval=20)
 col_bull_fvg = input.color(color.new(#00C853, 80), "Bullish FVG Farbe", group=grp_fvg)
 col_bear_fvg = input.color(color.new(#D50000, 80), "Bearish FVG Farbe", group=grp_fvg)
 col_mit_fvg  = input.color(color.new(#607D8B, 92), "Mitigiert Farbe",   group=grp_fvg)
-show_fvg_mid = input.bool(true,  "FVG Mittellinie (50% Level)", group=grp_fvg)
+show_fvg_mid = input.bool(true,  "FVG Mittellinie (50%)",      group=grp_fvg)
 
 grp_ob       = "Order Blocks"
-show_ob      = input.bool(true,  "Order Blocks anzeigen",       group=grp_ob)
-ob_lookback  = input.int(10,     "OB Breakout Lookback",         group=grp_ob, minval=3,
+show_ob      = input.bool(true,  "Order Blocks anzeigen",      group=grp_ob)
+ob_lookback  = input.int(10,     "OB Breakout Lookback",        group=grp_ob, minval=3,
                tooltip="Anzahl Bars für Swing-Vergleich beim Impulsdurchbruch")
-ob_min_body  = input.float(40.0, "Min. OB Körper (% der Range)", group=grp_ob, minval=0, step=5,
-               tooltip="Filtert Doji-Kerzen als Order Blocks heraus")
-max_ob       = input.int(5,      "Max. aktive OBs pro Seite",   group=grp_ob, minval=1, maxval=10)
-col_bull_ob  = input.color(color.new(#1B5E20, 75), "Bullish OB Farbe",  group=grp_ob)
-col_bear_ob  = input.color(color.new(#B71C1C, 75), "Bearish OB Farbe",  group=grp_ob)
-col_mit_ob   = input.color(color.new(#37474F, 90), "OB Mitigiert",      group=grp_ob)
+ob_min_body  = input.float(30.0, "Min. OB Körper % der Range", group=grp_ob, minval=0, step=5,
+               tooltip="Filtert Doji-Kerzen als OB heraus — nur für den OB-Candle selbst")
+max_ob       = input.int(5,      "Max. aktive OBs pro Seite",  group=grp_ob, minval=1, maxval=10)
+col_bull_ob  = input.color(color.new(#1B5E20, 75), "Bullish OB Farbe", group=grp_ob)
+col_bear_ob  = input.color(color.new(#B71C1C, 75), "Bearish OB Farbe", group=grp_ob)
+col_mit_ob   = input.color(color.new(#37474F, 90), "OB Mitigiert",     group=grp_ob)
 
 grp_brk      = "Breaker Blocks"
-show_brk     = input.bool(true, "Breaker Blocks anzeigen",  group=grp_brk,
-               tooltip="Gescheiterter OB wechselt Polarität — ehem. Support wird Widerstand und umgekehrt")
-col_bull_brk = input.color(color.new(#00BCD4, 75), "Bullish Breaker Farbe", group=grp_brk)
-col_bear_brk = input.color(color.new(#FF6F00, 75), "Bearish Breaker Farbe", group=grp_brk)
+show_brk     = input.bool(true, "Breaker Blocks anzeigen", group=grp_brk,
+               tooltip="Gescheiterter OB wechselt Polarität — ehem. Support wird Widerstand")
+col_bull_brk = input.color(color.new(#00BCD4, 75), "Bullish Breaker", group=grp_brk)
+col_bear_brk = input.color(color.new(#FF6F00, 75), "Bearish Breaker", group=grp_brk)
 
 grp_dis      = "Displacement Kerzen"
-show_dis     = input.bool(true,  "Displacement markieren",        group=grp_dis,
-               tooltip="Sehr große Impulskerzen (> ATR × Multiplikator) zeigen institutionelle Aktivität an")
-dis_mult     = input.float(2.0,  "ATR Multiplikator",             group=grp_dis, minval=1.0, step=0.5)
-dis_atr_len  = input.int(14,     "ATR Länge",                     group=grp_dis, minval=1)
-col_dis_bull = input.color(color.new(#00E676, 60), "Bullish Displacement", group=grp_dis)
-col_dis_bear = input.color(color.new(#FF1744, 60), "Bearish Displacement", group=grp_dis)
+show_dis     = input.bool(true,  "Displacement markieren",  group=grp_dis,
+               tooltip="Große Impulskerzen (Körper > ATR × Mult.) zeigen institutionelle Aktivität")
+dis_mult     = input.float(2.0,  "ATR Multiplikator",       group=grp_dis, minval=1.0, step=0.5)
+dis_atr_len  = input.int(14,     "ATR Länge",               group=grp_dis, minval=1)
+col_dis_bull = input.color(color.new(#00E676, 60), "Bull Displacement", group=grp_dis)
+col_dis_bear = input.color(color.new(#FF1744, 60), "Bear Displacement", group=grp_dis)
 
 // ─── FARBEN ──────────────────────────────────────────────────────────────────
 
@@ -51,67 +47,58 @@ COL_BULL = color.new(#00C853, 0)
 COL_BEAR = color.new(#D50000, 0)
 
 // ─── FAIR VALUE GAPS ─────────────────────────────────────────────────────────
-// Bullish FVG: low[0] > high[2]  → Lücke zwischen Kerze-2-High und Kerze-0-Low
-// Bearish FVG: high[0] < low[2]  → Lücke zwischen Kerze-2-Low und Kerze-0-High
-// Die Lücke entsteht weil Kerze 1 (die mittlere) impulsiv war und keinen überlap hat.
+// Bullish FVG : low[0] > high[2]  (Lücke zwischen Bar-2-High und Bar-0-Low)
+// Bearish FVG : high[0] < low[2]  (Lücke zwischen Bar-2-Low  und Bar-0-High)
+// Mitigation  : nur auf Bars NACH Erstellung prüfen (box.get_right < bar_index)
 
 var box[] bull_fvg = array.new<box>()
 var box[] bear_fvg = array.new<box>()
 
 if show_fvg and barstate.isconfirmed
+    bar_rng     = high - low
+    min_gap_abs = bar_rng * (fvg_min_size / 100.0)
 
-    // Minimalgröße als Filter (% der aktuellen Bar-Range)
-    bar_range   = high - low
-    min_gap_abs = bar_range * (fvg_min_size / 100.0)
-
-    // ── Bullish FVG ──────────────────────────────────────────────────────────
-    fvg_top = low           // aktueller Low = Oberkante der Lücke
-    fvg_bot = high[2]       // 2-Bar-alter High = Unterkante der Lücke
-    is_bull_fvg = fvg_top > fvg_bot and (fvg_top - fvg_bot) >= min_gap_abs
-
-    if is_bull_fvg
-        b = box.new(bar_index - 2, fvg_top, bar_index, fvg_bot,
-                    bgcolor=col_bull_fvg, border_color=color.new(COL_BULL, 40),
-                    border_width=1, extend=extend.right)
+    // Bullish FVG
+    ft = low
+    fb = high[2]
+    if ft > fb and (ft - fb) >= min_gap_abs
+        mid = (ft + fb) / 2.0
+        b   = box.new(left=bar_index - 2, top=ft, right=bar_index + 1, bottom=fb,
+                      bgcolor=col_bull_fvg, border_color=color.new(COL_BULL, 40),
+                      border_width=1, extend=extend.right)
         if show_fvg_mid
-            line.new(bar_index - 2, (fvg_top + fvg_bot) / 2,
-                     bar_index, (fvg_top + fvg_bot) / 2,
+            line.new(x1=bar_index - 2, y1=mid, x2=bar_index + 1, y2=mid,
                      color=color.new(COL_BULL, 50), style=line.style_dotted, extend=extend.right)
-        label.new(bar_index, fvg_top, " FVG",
+        label.new(x=bar_index, y=ft, text=" FVG",
                   color=color.new(COL_BULL, 70), textcolor=COL_BULL,
                   style=label.style_label_left, size=size.tiny)
         array.push(bull_fvg, b)
         if array.size(bull_fvg) > max_fvg
             box.delete(array.shift(bull_fvg))
 
-    // ── Bearish FVG ──────────────────────────────────────────────────────────
-    fvg_top2 = low[2]       // 2-Bar-alter Low = Oberkante der Lücke
-    fvg_bot2 = high          // aktueller High = Unterkante der Lücke
-    is_bear_fvg = fvg_top2 > fvg_bot2 and (fvg_top2 - fvg_bot2) >= min_gap_abs
-
-    if is_bear_fvg
-        b = box.new(bar_index - 2, fvg_top2, bar_index, fvg_bot2,
-                    bgcolor=col_bear_fvg, border_color=color.new(COL_BEAR, 40),
-                    border_width=1, extend=extend.right)
+    // Bearish FVG
+    ft2 = low[2]
+    fb2 = high
+    if ft2 > fb2 and (ft2 - fb2) >= min_gap_abs
+        mid2 = (ft2 + fb2) / 2.0
+        b2   = box.new(left=bar_index - 2, top=ft2, right=bar_index + 1, bottom=fb2,
+                       bgcolor=col_bear_fvg, border_color=color.new(COL_BEAR, 40),
+                       border_width=1, extend=extend.right)
         if show_fvg_mid
-            line.new(bar_index - 2, (fvg_top2 + fvg_bot2) / 2,
-                     bar_index, (fvg_top2 + fvg_bot2) / 2,
+            line.new(x1=bar_index - 2, y1=mid2, x2=bar_index + 1, y2=mid2,
                      color=color.new(COL_BEAR, 50), style=line.style_dotted, extend=extend.right)
-        label.new(bar_index, fvg_top2, " FVG",
+        label.new(x=bar_index, y=ft2, text=" FVG",
                   color=color.new(COL_BEAR, 70), textcolor=COL_BEAR,
                   style=label.style_label_left, size=size.tiny)
-        array.push(bear_fvg, b)
+        array.push(bear_fvg, b2)
         if array.size(bear_fvg) > max_fvg
             box.delete(array.shift(bear_fvg))
 
-// ── FVG Mitigation (Preis kehrt in die Zone zurück) ──────────────────────────
-
+// Mitigation: box.get_right(b) < bar_index verhindert Same-Bar-Mitigation
 if show_fvg and array.size(bull_fvg) > 0
     for i = array.size(bull_fvg) - 1 to 0
-        b        = array.get(bull_fvg, i)
-        zone_top = box.get_top(b)
-        zone_bot = box.get_bottom(b)
-        if low <= zone_top and high >= zone_bot   // Preis berührt die Zone
+        b = array.get(bull_fvg, i)
+        if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
@@ -119,92 +106,65 @@ if show_fvg and array.size(bull_fvg) > 0
 
 if show_fvg and array.size(bear_fvg) > 0
     for i = array.size(bear_fvg) - 1 to 0
-        b        = array.get(bear_fvg, i)
-        zone_top = box.get_top(b)
-        zone_bot = box.get_bottom(b)
-        if low <= zone_top and high >= zone_bot
+        b = array.get(bear_fvg, i)
+        if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
             array.remove(bear_fvg, i)
 
 // ─── ORDER BLOCKS ─────────────────────────────────────────────────────────────
-// Bullish OB: letzte bearische Kerze direkt vor einem bullischen Impulsdurchbruch
-//   → Institutionelle kaufen im Körper dieser Kerze (open[1] bis close[1])
-// Bearish OB: letzte bullische Kerze direkt vor einem bearischen Impulsdurchbruch
+// Impulsdurchbruch + vorherige Gegen-Kerze mit Mindestkörper = Order Block
 
 var box[] bull_ob = array.new<box>()
 var box[] bear_ob = array.new<box>()
 
 if show_ob and barstate.isconfirmed
+    prev_range    = high[1] - low[1]
+    prev_body_pct = prev_range > 0 ? math.abs(close[1] - open[1]) / prev_range * 100.0 : 0.0
 
-    candle_range  = high - low
-    body_size     = math.abs(close - open)
-    body_pct      = candle_range > 0 ? body_size / candle_range * 100.0 : 0.0
-
-    prev_body_size = math.abs(close[1] - open[1])
-    prev_range     = high[1] - low[1]
-    prev_body_pct  = prev_range > 0 ? prev_body_size / prev_range * 100.0 : 0.0
-
-    // Bullischer Impulsdurchbruch: schließt über dem höchsten High der letzten ob_lookback Bars
-    bull_impulse = close > ta.highest(high[1], ob_lookback) and body_pct >= ob_min_body
-    // Vorherige Kerze war bearisch mit signifikantem Körper
+    bull_impulse = close > ta.highest(high[1], ob_lookback)
     prev_bearish = open[1] > close[1] and prev_body_pct >= ob_min_body
 
-    // Bearischer Impulsdurchbruch: schließt unter dem niedrigsten Low der letzten ob_lookback Bars
-    bear_impulse = close < ta.lowest(low[1], ob_lookback) and body_pct >= ob_min_body
-    // Vorherige Kerze war bullisch mit signifikantem Körper
+    bear_impulse = close < ta.lowest(low[1], ob_lookback)
     prev_bullish = close[1] > open[1] and prev_body_pct >= ob_min_body
 
-    // ── Bullish OB ───────────────────────────────────────────────────────────
     if bull_impulse and prev_bearish
-        ob_top = open[1]       // bearische Kerze: open oben
-        ob_bot = close[1]      // bearische Kerze: close unten
-        b = box.new(bar_index - 1, ob_top, bar_index, ob_bot,
+        b = box.new(left=bar_index - 1, top=open[1], right=bar_index + 1, bottom=close[1],
                     bgcolor=col_bull_ob, border_color=color.new(COL_BULL, 30),
                     border_width=1, extend=extend.right)
-        label.new(bar_index - 1, ob_top, " Bull OB",
+        label.new(x=bar_index - 1, y=open[1], text=" Bull OB",
                   color=color.new(COL_BULL, 60), textcolor=COL_BULL,
                   style=label.style_label_right, size=size.tiny)
         array.push(bull_ob, b)
         if array.size(bull_ob) > max_ob
             box.delete(array.shift(bull_ob))
 
-    // ── Bearish OB ───────────────────────────────────────────────────────────
     if bear_impulse and prev_bullish
-        ob_top = close[1]      // bullische Kerze: close oben
-        ob_bot = open[1]       // bullische Kerze: open unten
-        b = box.new(bar_index - 1, ob_top, bar_index, ob_bot,
-                    bgcolor=col_bear_ob, border_color=color.new(COL_BEAR, 30),
-                    border_width=1, extend=extend.right)
-        label.new(bar_index - 1, ob_top, " Bear OB",
+        b2 = box.new(left=bar_index - 1, top=close[1], right=bar_index + 1, bottom=open[1],
+                     bgcolor=col_bear_ob, border_color=color.new(COL_BEAR, 30),
+                     border_width=1, extend=extend.right)
+        label.new(x=bar_index - 1, y=close[1], text=" Bear OB",
                   color=color.new(COL_BEAR, 60), textcolor=COL_BEAR,
                   style=label.style_label_right, size=size.tiny)
-        array.push(bear_ob, b)
+        array.push(bear_ob, b2)
         if array.size(bear_ob) > max_ob
             box.delete(array.shift(bear_ob))
 
-// ── OB Mitigation → Breaker Block Konversion ─────────────────────────────────
-// Wenn Preis einen OB vollständig durchbricht (schließt durch den Körper),
-// wird der OB zum Breaker Block mit umgekehrter Polarität.
-// Bullish OB → Bearish Breaker (war Support, jetzt Widerstand)
-// Bearish OB → Bullish Breaker (war Widerstand, jetzt Support)
+// ─── OB MITIGATION → BREAKER BLOCK ───────────────────────────────────────────
 
 var box[] bull_brk = array.new<box>()
 var box[] bear_brk = array.new<box>()
 
 if show_ob and array.size(bull_ob) > 0
     for i = array.size(bull_ob) - 1 to 0
-        b        = array.get(bull_ob, i)
-        zone_top = box.get_top(b)
-        zone_bot = box.get_bottom(b)
-        if low <= zone_top and close < zone_bot
+        b = array.get(bull_ob, i)
+        if box.get_right(b) < bar_index and low <= box.get_top(b) and close < box.get_bottom(b)
             if show_brk
-                // OB wird zum Bearish Breaker
                 box.set_bgcolor(b, col_bear_brk)
                 box.set_border_color(b, color.new(#FF6F00, 30))
                 box.set_extend(b, extend.right)
-                label.new(bar_index, zone_top, " ↓ Breaker",
+                label.new(x=bar_index, y=box.get_top(b), text=" ↓ Breaker",
                           color=color.new(#FF6F00, 60), textcolor=color.new(#FF6F00, 0),
                           style=label.style_label_left, size=size.tiny)
                 array.push(bear_brk, b)
@@ -215,16 +175,13 @@ if show_ob and array.size(bull_ob) > 0
 
 if show_ob and array.size(bear_ob) > 0
     for i = array.size(bear_ob) - 1 to 0
-        b        = array.get(bear_ob, i)
-        zone_top = box.get_top(b)
-        zone_bot = box.get_bottom(b)
-        if high >= zone_bot and close > zone_top
+        b = array.get(bear_ob, i)
+        if box.get_right(b) < bar_index and high >= box.get_bottom(b) and close > box.get_top(b)
             if show_brk
-                // OB wird zum Bullish Breaker
                 box.set_bgcolor(b, col_bull_brk)
                 box.set_border_color(b, color.new(#00BCD4, 30))
                 box.set_extend(b, extend.right)
-                label.new(bar_index, zone_bot, " ↑ Breaker",
+                label.new(x=bar_index, y=box.get_bottom(b), text=" ↑ Breaker",
                           color=color.new(#00BCD4, 60), textcolor=color.new(#00BCD4, 0),
                           style=label.style_label_left, size=size.tiny)
                 array.push(bull_brk, b)
@@ -233,7 +190,6 @@ if show_ob and array.size(bear_ob) > 0
                 box.set_extend(b, extend.none)
             array.remove(bear_ob, i)
 
-// Breaker Mitigation: wenn Preis den Breaker erneut testet und durchbricht → inaktiv
 if show_brk and array.size(bear_brk) > 0
     for i = array.size(bear_brk) - 1 to 0
         b = array.get(bear_brk, i)
@@ -251,24 +207,17 @@ if show_brk and array.size(bull_brk) > 0
             array.remove(bull_brk, i)
 
 // ─── DISPLACEMENT KERZEN ──────────────────────────────────────────────────────
-// Große Impulskerzen (Körper > ATR × Multiplikator) = institutionelle Aktivität.
-// Werden als leuchtend gefärbte Bars hervorgehoben und signalisieren Trendrichtung.
 
-dis_atr   = ta.atr(dis_atr_len)
-dis_body  = math.abs(close - open)
-is_dis    = show_dis and dis_body >= dis_mult * dis_atr
-is_dis_bull = is_dis and close > open
-is_dis_bear = is_dis and close < open
+dis_atr     = ta.atr(dis_atr_len)
+is_dis_bull = show_dis and math.abs(close - open) >= dis_mult * dis_atr and close > open
+is_dis_bear = show_dis and math.abs(close - open) >= dis_mult * dis_atr and close < open
 
-barcolor(is_dis_bull ? col_dis_bull : is_dis_bear ? col_dis_bear : na,
-         title="Displacement Kerze")
+barcolor(is_dis_bull ? col_dis_bull : is_dis_bear ? col_dis_bear : na, title="Displacement")
 
-// Label auf Displacement Kerzen
-if is_dis and barstate.isconfirmed
-    dis_lbl = is_dis_bull ? "⚡ BULL DISP" : "⚡ BEAR DISP"
+if (is_dis_bull or is_dis_bear) and barstate.isconfirmed
     dis_col = is_dis_bull ? color.new(#00E676, 0) : color.new(#FF1744, 0)
-    dis_y   = is_dis_bull ? low  : high
-    dis_sty = is_dis_bull ? label.style_label_up : label.style_label_down
-    label.new(bar_index, dis_y, dis_lbl,
+    label.new(x=bar_index, y=(is_dis_bull ? low : high),
+              text=(is_dis_bull ? "⚡ BULL" : "⚡ BEAR"),
               color=color.new(dis_col, 70), textcolor=dis_col,
-              style=dis_sty, size=size.tiny)
+              style=(is_dis_bull ? label.style_label_up : label.style_label_down),
+              size=size.tiny)
