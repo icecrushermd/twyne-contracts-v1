@@ -110,17 +110,9 @@ f_1m_body(h, m) =>
 
 // ─── ALIGNMENT SCORE ─────────────────────────────────────────────────────────
 
-active_count = (show_m   ? 1 : 0) + (show_w  ? 1 : 0) + (show_d  ? 1 : 0) +
-               (show_4h  ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) +
-               (show_cur ? 1 : 0)
+active_count = (show_m ? 1 : 0) + (show_w ? 1 : 0) + (show_d ? 1 : 0) + (show_4h ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) + (show_cur ? 1 : 0)
 
-bull_count   = (show_m   and trend_m   == 1 ? 1 : 0) +
-               (show_w   and trend_w   == 1 ? 1 : 0) +
-               (show_d   and trend_d   == 1 ? 1 : 0) +
-               (show_4h  and trend_4h  == 1 ? 1 : 0) +
-               (show_1h  and trend_1h  == 1 ? 1 : 0) +
-               (show_15  and trend_15  == 1 ? 1 : 0) +
-               (show_cur and trend_cur == 1 ? 1 : 0)
+bull_count = (show_m and trend_m == 1 ? 1 : 0) + (show_w and trend_w == 1 ? 1 : 0) + (show_d and trend_d == 1 ? 1 : 0) + (show_4h and trend_4h == 1 ? 1 : 0) + (show_1h and trend_1h == 1 ? 1 : 0) + (show_15 and trend_15 == 1 ? 1 : 0) + (show_cur and trend_cur == 1 ? 1 : 0)
 
 alignment_pct = active_count > 0 ? (bull_count / active_count) * 100.0 : 50.0
 
@@ -307,14 +299,7 @@ _pos(s) =>
 var table tbl = na
 
 if barstate.islast
-    int rows = 1  // header
-    rows += (show_m   ? 1 : 0) + (show_w  ? 1 : 0) + (show_d  ? 1 : 0) +
-            (show_4h  ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) +
-            (show_cur ? 1 : 0)
-    rows += 1  // alignment row
-    rows += 1  // dominance row
-    rows += 4  // stop: section header + price + dist% + dist ATR
-    rows += 4  // MM: section header + price + dist% + dist ATR
+    int rows = 1 + (show_m ? 1 : 0) + (show_w ? 1 : 0) + (show_d ? 1 : 0) + (show_4h ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) + (show_cur ? 1 : 0) + 1 + 1 + 4 + 4
 
     tbl := table.new(_pos(tbl_pos), 2, rows,
          bgcolor=COL_BG, border_width=1,
