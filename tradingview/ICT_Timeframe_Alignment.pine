@@ -15,8 +15,8 @@ ema_slow    = input.int(50,  "Slow EMA",            minval=1,   group=grp_method
 lookback    = input.int(10,  "Structure Lookback",  minval=3,   group=grp_method)
 
 grp_stop    = "Dynamic Stop"
-piv_left    = input.int(5,    "Pivot Left Bars",   minval=1,         group=grp_stop)
-piv_right   = input.int(5,    "Pivot Right Bars",  minval=1,         group=grp_stop)
+piv_left    = input.int(5, "Pivot Left Bars",  options=[3, 5], group=grp_stop)
+piv_right   = input.int(5, "Pivot Right Bars", options=[3, 5], group=grp_stop)
 atr_len     = input.int(14,   "ATR Length",        minval=1,         group=grp_stop)
 atr_buf     = input.float(0.5,"ATR Buffer",        minval=0.0, step=0.1, group=grp_stop,
               tooltip="Extra distance below/above pivot in ATR units")
