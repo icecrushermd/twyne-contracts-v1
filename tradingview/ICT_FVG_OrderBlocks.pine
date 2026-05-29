@@ -100,13 +100,15 @@ if show_fvg and barstate.isconfirmed
             box.delete(array.shift(bear_fvg))
             line.delete(array.shift(bear_fvg_mid))
 
-// Mitigation: box.get_right(b) < bar_index verhindert Same-Bar-Mitigation
-// Box + Mittellinie werden synchron gestoppt (extend.none) und grau eingefärbt
+// Mitigation: FVG bleibt aktiv (verlängert) bis Close durch die 50%-Mittellinie geht.
+// Nur berühren reicht nicht — ICT: Zone zählt erst als gebrochen wenn Preis
+// die Equilibrium-Linie (Mitte des Gaps) schließt.
 if show_fvg and array.size(bull_fvg) > 0
     for i = array.size(bull_fvg) - 1 to 0
-        b  = array.get(bull_fvg, i)
-        ml = array.get(bull_fvg_mid, i)
-        if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
+        b   = array.get(bull_fvg, i)
+        ml  = array.get(bull_fvg_mid, i)
+        mid = (box.get_top(b) + box.get_bottom(b)) / 2.0
+        if box.get_right(b) < bar_index and close < mid
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
@@ -117,9 +119,10 @@ if show_fvg and array.size(bull_fvg) > 0
 
 if show_fvg and array.size(bear_fvg) > 0
     for i = array.size(bear_fvg) - 1 to 0
-        b  = array.get(bear_fvg, i)
-        ml = array.get(bear_fvg_mid, i)
-        if box.get_right(b) < bar_index and low <= box.get_top(b) and high >= box.get_bottom(b)
+        b   = array.get(bear_fvg, i)
+        ml  = array.get(bear_fvg_mid, i)
+        mid = (box.get_top(b) + box.get_bottom(b)) / 2.0
+        if box.get_right(b) < bar_index and close > mid
             box.set_bgcolor(b, col_mit_fvg)
             box.set_border_color(b, color.new(#607D8B, 60))
             box.set_extend(b, extend.none)
