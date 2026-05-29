@@ -1,0 +1,113 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// ICT Order Flow Delta — separates Pane-Indikator
+// Zeigt approximiertes Kaufdruck- / Verkaufsdruckvolumen pro Kerze,
+// kumulierten Session-Delta und Dominanz-Stärkemessung.
+//
+// Zur Verwendung zusammen mit: ICT_TFA+SL (overlay=true)
+
+//@version=5
+indicator("ICT Order Flow Delta", shortTitle="ICT OFD", overlay=false)
+
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
+
+grp_delta   = "Delta Einstellungen"
+dom_len     = input.int(20,   "Dominanz Lookback (Kerzen)",  minval=3,  group=grp_delta)
+smooth_len  = input.int(3,    "Delta Glättung (EMA)",         minval=1,  group=grp_delta)
+reset_sess  = input.bool(true,"Session-Delta täglich resetten", group=grp_delta,
+              tooltip="Setzt den kumulierten Delta zu US-Markteröffnung (09:30 NY) zurück")
+
+grp_vis     = "Darstellung"
+show_hist   = input.bool(true, "Delta Histogramm",      group=grp_vis)
+show_cum    = input.bool(true, "Kumulierter Delta",     group=grp_vis)
+show_smooth = input.bool(true, "Geglätteter Delta",     group=grp_vis)
+show_dom    = input.bool(true, "Dominanz-Füllung",      group=grp_vis)
+
+COL_BUY    = color.new(#00C853, 0)
+COL_SELL   = color.new(#D50000, 0)
+COL_NEUT   = color.new(#607D8B, 0)
+COL_CUM_B  = color.new(#00E5FF, 0)
+COL_CUM_S  = color.new(#FF4081, 0)
+
+// ─── DELTA BERECHNUNG ────────────────────────────────────────────────────────
+// Approximation: Anteil des Volumens in Richtung des Kursschlusses innerhalb der Range
+// Kerze die am oberen Ende schliesst → mehr Kaufdruck, am unteren → mehr Verkaufsdruck
+
+buy_vol  = high != low ? volume * (close - low)  / (high - low) : volume * 0.5
+sell_vol = volume - buy_vol
+delta    = buy_vol - sell_vol
+
+// Session-Reset: zu Beginn jeder US-Handelssession (09:30 NY) neu starten
+is_sess_open = hour(time, "America/New_York") == 9 and minute(time, "America/New_York") == 30
+               and ta.change(time("D")) != 0 == false
+
+var float cum_delta = 0.0
+if reset_sess and is_sess_open
+    cum_delta := delta
+else
+    cum_delta += delta
+
+// Rollende Dominanz: Delta-Summe normiert auf Volumen (Skala −100…+100)
+delta_sum = math.sum(delta, dom_len)
+vol_sum   = math.sum(volume, dom_len)
+dom_pct   = vol_sum > 0 ? delta_sum / vol_sum * 100.0 : 0.0
+
+// Geglätteter Delta (EMA über einzelne Bar-Deltas)
+smooth_delta = ta.ema(delta, smooth_len)
+
+// ─── NULLLINIE ───────────────────────────────────────────────────────────────
+
+hline(0, "Null", color=color.new(#607D8B, 50), linestyle=hline.style_solid, linewidth=1)
+
+// ─── DOMINANZ HINTERGRUND ────────────────────────────────────────────────────
+
+bgcolor(show_dom and dom_pct >  20 ? color.new(COL_BUY,  93) :
+        show_dom and dom_pct < -20 ? color.new(COL_SELL, 93) : na,
+        title="Dominanz Zone")
+
+// ─── HISTOGRAMM ──────────────────────────────────────────────────────────────
+
+plot(show_hist ? delta : na, "Delta Bar",
+     color  = delta >= 0 ? color.new(COL_BUY, 20) : color.new(COL_SELL, 20),
+     style  = plot.style_columns,
+     linewidth = 1)
+
+// ─── GEGLÄTTETER DELTA ───────────────────────────────────────────────────────
+
+plot(show_smooth ? smooth_delta : na, "Delta EMA",
+     color = smooth_delta >= 0 ? COL_BUY : COL_SELL,
+     linewidth = 2)
+
+// ─── KUMULIERTER SESSION-DELTA ───────────────────────────────────────────────
+
+cum_col = cum_delta >= 0 ? COL_CUM_B : COL_CUM_S
+plot(show_cum ? cum_delta : na, "Kum. Delta",
+     color=cum_col, linewidth=1, style=plot.style_line)
+
+// ─── DOMINANZ STÄRKE-LINIE ───────────────────────────────────────────────────
+
+hline( 20, "Bull Schwelle", color=color.new(COL_BUY,  50), linestyle=hline.style_dashed)
+hline(-20, "Bear Schwelle", color=color.new(COL_SELL, 50), linestyle=hline.style_dashed)
+
+plot(dom_pct, "Dominanz %",
+     color     = dom_pct >  20 ? COL_BUY : dom_pct < -20 ? COL_SELL : COL_NEUT,
+     linewidth = 1,
+     style     = plot.style_line,
+     display   = display.none)  // nur in Data Window sichtbar, nicht als extra Linie
+
+// ─── LABEL AUF LETZTEM BAR ───────────────────────────────────────────────────
+
+if barstate.islast
+    dom_str = dom_pct >  20 ? "Käufer +" + str.tostring(math.round(dom_pct)) + "%" :
+              dom_pct < -20 ? "Verkäufer " + str.tostring(math.round(dom_pct)) + "%" :
+              "Ausgeglichen (" + str.tostring(math.round(dom_pct)) + "%)"
+    dom_col = dom_pct >  20 ? COL_BUY : dom_pct < -20 ? COL_SELL : COL_NEUT
+
+    label.new(bar_index, smooth_delta, "  " + dom_str,
+              color=color.new(dom_col, 80), textcolor=dom_col,
+              style=label.style_label_left, size=size.small)
+
+    // Kumulierter Delta Label
+    cum_str = (cum_delta >= 0 ? "Kum.Δ +" : "Kum.Δ ") + str.tostring(math.round(cum_delta))
+    label.new(bar_index, cum_delta, "  " + cum_str,
+              color=color.new(cum_col, 80), textcolor=cum_col,
+              style=label.style_label_left, size=size.small)

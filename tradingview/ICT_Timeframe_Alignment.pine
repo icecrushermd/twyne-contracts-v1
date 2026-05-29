@@ -45,6 +45,17 @@ show_929    = input.bool(true,  "09:29  Kerze  (Pre-Open)",   group=grp_lvl,
 col_830     = input.color(color.new(#FF9800, 0), "Farbe 08:30", group=grp_lvl)
 col_929     = input.color(color.new(#2196F3, 0), "Farbe 09:29", group=grp_lvl)
 
+grp_flow    = "Order Flow / Projektion"
+show_mm     = input.bool(true,  "Measured Move Ziel",          group=grp_flow,
+              tooltip="Projiziert die letzte Swing-Range vorwärts als nächstes Kursziel")
+show_eqhl   = input.bool(true,  "Equal Highs / Equal Lows",    group=grp_flow,
+              tooltip="Markiert Liquiditätspools — Bereiche wo Stops clustern und Kurs hinläuft")
+dom_len     = input.int(20,   "Dominanz Lookback (Kerzen)",    minval=5, group=grp_flow)
+eq_thresh   = input.float(0.1,"Equal H/L Toleranz %",          minval=0.01, step=0.01, group=grp_flow)
+eq_lookback = input.int(30,   "Equal H/L Lookback (Kerzen)",   minval=10,  group=grp_flow)
+col_mm      = input.color(color.new(#E040FB, 0), "MM Ziel Farbe",    group=grp_flow)
+col_eq      = input.color(color.new(#FFD600, 0), "Equal H/L Farbe",  group=grp_flow)
+
 // ─── COLOURS ─────────────────────────────────────────────────────────────────
 
 COL_BULL   = color.new(#00C853, 0)
@@ -110,6 +121,33 @@ bull_count   = (show_m   and trend_m   == 1 ? 1 : 0) +
 
 alignment_pct = active_count > 0 ? (bull_count / active_count) * 100.0 : 50.0
 
+// ─── ORDER FLOW / KÄUFER-VERKÄUFER DOMINANZ ──────────────────────────────────
+
+// Approximiertes Delta: Kaufvolumen − Verkaufvolumen pro Kerze
+// Formel: Wo schliesst die Kerze innerhalb ihrer Range?
+buy_vol  = high != low ? volume * (close - low) / (high - low) : volume * 0.5
+sell_vol = volume - buy_vol
+delta    = buy_vol - sell_vol
+
+// Rollende Dominanz der letzten dom_len Kerzen (normiert auf Volumen, Skala −100…+100)
+delta_sum = math.sum(delta, dom_len)
+vol_sum   = math.sum(volume, dom_len)
+dom_pct   = vol_sum > 0 ? delta_sum / vol_sum * 100.0 : 0.0
+
+dom_str = dom_pct >  20.0 ? "▲ Käufer  +" + str.tostring(math.round(dom_pct)) + "%" :
+          dom_pct < -20.0 ? "▼ Verkäufer " + str.tostring(math.round(dom_pct)) + "%" :
+          "● Ausgeglichen"
+dom_col = dom_pct >  20.0 ? COL_BULL : dom_pct < -20.0 ? COL_BEAR : COL_NEUT
+
+// ─── EQUAL HIGHS / EQUAL LOWS (Liquiditätspools) ─────────────────────────────
+
+tol         = eq_thresh / 100.0
+recent_high = ta.highest(high[1], eq_lookback)
+recent_low  = ta.lowest(low[1],   eq_lookback)
+
+is_eq_high = show_eqhl and recent_high > 0 and math.abs(high - recent_high) / recent_high < tol
+is_eq_low  = show_eqhl and recent_low  > 0 and math.abs(low  - recent_low)  / recent_low  < tol
+
 // ─── PIVOT / SWING DETECTION ─────────────────────────────────────────────────
 
 atr_val = ta.atr(atr_len)
@@ -140,6 +178,23 @@ else if trend_cur == -1 and not na(last_swH)
 stop_dist_pct = not na(stop_level) ? math.abs(close - stop_level) / close * 100.0 : float(na)
 stop_dist_atr = not na(stop_level) ? math.abs(close - stop_level) / atr_val        : float(na)
 
+// ─── MEASURED MOVE PROJEKTION ─────────────────────────────────────────────────
+// Letzte Swing-Range (Amplitude) wird vom aktuellen Extrempunkt projiziert.
+// Bullish:  Ziel = letzter Swing High + Range  (Measured Move Up)
+// Bearish:  Ziel = letzter Swing Low  − Range  (Measured Move Down)
+
+swing_range = not na(last_swH) and not na(last_swL) ? last_swH - last_swL : float(na)
+
+mm_target = float(na)
+if show_mm and not na(swing_range)
+    if trend_cur == 1
+        mm_target := last_swH + swing_range
+    else if trend_cur == -1
+        mm_target := last_swL - swing_range
+
+mm_dist_pct = not na(mm_target) ? math.abs(mm_target - close) / close * 100.0 : float(na)
+mm_dist_atr = not na(mm_target) ? math.abs(mm_target - close) / atr_val        : float(na)
+
 // ─── CHART VISUALS ───────────────────────────────────────────────────────────
 
 // Dynamic stop line
@@ -151,6 +206,23 @@ plotshape(show_swings and not na(swH), "Swing High", shape.triangledown,
           location.abovebar, color.new(COL_BEAR, 20), size=size.tiny)
 plotshape(show_swings and not na(swL), "Swing Low",  shape.triangleup,
           location.belowbar, color.new(COL_BULL, 20), size=size.tiny)
+
+// Measured Move Ziel-Linie
+plot(show_mm ? mm_target : na, "MM Ziel",
+     color=col_mm, linewidth=2, style=plot.style_linebr)
+
+// MM Ziel Label (nur auf letztem Bar)
+if show_mm and not na(mm_target) and barstate.islast
+    mm_lbl = (trend_cur == 1 ? "▲ MM " : "▼ MM ") + str.tostring(mm_target, format.mintick)
+    label.new(bar_index, mm_target, mm_lbl,
+              color=color.new(col_mm, 70), textcolor=col_mm,
+              style=label.style_label_left, size=size.small)
+
+// Equal Highs / Equal Lows Marker
+plotshape(is_eq_high, "Equal High (Liquidität)", shape.diamond,
+          location.abovebar, color.new(col_eq, 20), size=size.tiny)
+plotshape(is_eq_low,  "Equal Low  (Liquidität)", shape.diamond,
+          location.belowbar, color.new(col_eq, 20), size=size.tiny)
 
 // Subtle background tint for overall alignment bias
 bgcolor(alignment_pct >= 70 ? color.new(COL_BULL, 95) :
@@ -243,7 +315,9 @@ if barstate.islast
     if show_15  => rows += 1
     if show_cur => rows += 1
     rows += 1  // alignment row
+    rows += 1  // dominance row
     rows += 4  // stop: section header + price + dist% + dist ATR
+    rows += 4  // MM: section header + price + dist% + dist ATR
 
     tbl := table.new(_pos(tbl_pos), 2, rows,
          bgcolor=COL_BG, border_width=1,
@@ -294,6 +368,11 @@ if barstate.islast
     table.cell(tbl, 1, row, aln_label,   text_color=aln_col,   bgcolor=COL_BG,     text_size=size.small)
     row += 1
 
+    // Dominance row
+    table.cell(tbl, 0, row, "DOMINANZ",  text_color=COL_TEXT,  bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, dom_str,     text_color=dom_col,   bgcolor=COL_BG,     text_size=size.small)
+    row += 1
+
     // Stop section header — shows which structure level the stop references
     stop_dir_lbl = trend_cur == 1 ? "STOP  ↓ below HL" : trend_cur == -1 ? "STOP  ↑ above LH" : "STOP  (no trend)"
     table.cell(tbl, 0, row, stop_dir_lbl, text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
@@ -316,3 +395,27 @@ if barstate.islast
     dist_atr_str = not na(stop_dist_atr) ? str.tostring(stop_dist_atr, "#.##") + " ATR" : "—"
     table.cell(tbl, 0, row, "Abstand ATR", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, dist_atr_str,  text_color=COL_STOP, bgcolor=COL_BG,     text_size=size.small)
+    row += 1
+
+    // Measured Move section header
+    mm_dir_lbl = trend_cur == 1 ? "MM ZIEL  ↑ (Long)" : trend_cur == -1 ? "MM ZIEL  ↓ (Short)" : "MM ZIEL"
+    table.cell(tbl, 0, row, mm_dir_lbl, text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, "─────────", text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
+    row += 1
+
+    // MM price
+    mm_price_str = not na(mm_target) ? str.tostring(mm_target, format.mintick) : "—"
+    table.cell(tbl, 0, row, "Zielpreis",   text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, mm_price_str,  text_color=col_mm,   bgcolor=COL_BG,     text_size=size.small)
+    row += 1
+
+    // MM distance %
+    mm_pct_str = not na(mm_dist_pct) ? str.tostring(mm_dist_pct, "#.##") + " %" : "—"
+    table.cell(tbl, 0, row, "Distanz %",  text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, mm_pct_str,   text_color=col_mm,   bgcolor=COL_BG,     text_size=size.small)
+    row += 1
+
+    // MM distance ATR
+    mm_atr_str = not na(mm_dist_atr) ? str.tostring(mm_dist_atr, "#.##") + " ATR" : "—"
+    table.cell(tbl, 0, row, "Distanz ATR", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, mm_atr_str,    text_color=col_mm,   bgcolor=COL_BG,     text_size=size.small)
