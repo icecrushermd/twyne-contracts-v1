@@ -4,8 +4,8 @@
 // Session Highs/Lows (Asian Range, London Range)
 // Previous Day High / Low / Close
 
-//@version=5
-indicator("ICT Levels & Sessions", shortTitle="ICT L&S", overlay=true)
+//@version=6
+indicator("ICT Levels & Sessions", shorttitle="ICT L&S", overlay=true)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 
@@ -110,14 +110,20 @@ if show_pdw and new_week
 // Jede Session wird täglich resettet und während ihres Zeitfensters aufgebaut.
 // Die Linien zeigen nach Session-Ende den finalen H/L bis zum nächsten Tag.
 
-var float asia_h = na, var float asia_l = na
-var float ldn_h  = na, var float ldn_l  = na
-var float ny_h_  = na, var float ny_l_  = na
+var float asia_h = na
+var float asia_l = na
+var float ldn_h  = na
+var float ldn_l  = na
+var float ny_h_  = na
+var float ny_l_  = na
 
 if new_day
-    asia_h := na ;  asia_l := na
-    ldn_h  := na ;  ldn_l  := na
-    ny_h_  := na ;  ny_l_  := na
+    asia_h := na
+    asia_l := na
+    ldn_h  := na
+    ldn_l  := na
+    ny_h_  := na
+    ny_l_  := na
 
 in_asia_sess = ny_h >= 0 and ny_h < 7
 in_ldn_sess  = ny_h >= 2 and ny_h < 7

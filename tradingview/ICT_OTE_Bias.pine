@@ -5,8 +5,8 @@
 // Bias : Automatischer Tages-Bias aus HTF-Trend + PDH/PDL-Position
 // Risk : Positionsgröße-Rechner basierend auf Stop und Konto-Risiko
 
-//@version=5
-indicator("ICT OTE + Bias + Risk", shortTitle="ICT OTE", overlay=true)
+//@version=6
+indicator("ICT OTE + Bias + Risk", shorttitle="ICT OTE", overlay=true)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 
@@ -162,8 +162,10 @@ swL_r = ta.pivotlow(low,  piv_l_r, piv_r_r)
 
 var float sl_swH = na
 var float sl_swL = na
-if not na(swH_r) => sl_swH := swH_r
-if not na(swL_r) => sl_swL := swL_r
+if not na(swH_r)
+    sl_swH := swH_r
+if not na(swL_r)
+    sl_swL := swL_r
 
 stop_price = trend_cur == 1  and not na(sl_swL) ? sl_swL - atr_buf_r * atr_r :
              trend_cur == -1 and not na(sl_swH) ? sl_swH + atr_buf_r * atr_r : float(na)

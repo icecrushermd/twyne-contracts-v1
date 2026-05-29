@@ -5,8 +5,8 @@
 //
 // Zur Verwendung zusammen mit: ICT_TFA+SL (overlay=true)
 
-//@version=5
-indicator("ICT Order Flow Delta", shortTitle="ICT OFD", overlay=false)
+//@version=6
+indicator("ICT Order Flow Delta", shorttitle="ICT OFD", overlay=false)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 

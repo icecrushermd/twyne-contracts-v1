@@ -5,8 +5,8 @@
 // Displacement: Große Impulskerzen die institutionelle Aktivität signalisieren
 // Breaker    : Gescheiterter OB der seine Polarität wechselt (Support → Widerstand)
 
-//@version=5
-indicator("ICT FVG + OB + Breaker", shortTitle="ICT FVG+OB", overlay=true)
+//@version=6
+indicator("ICT FVG + OB + Breaker", shorttitle="ICT FVG+OB", overlay=true)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 

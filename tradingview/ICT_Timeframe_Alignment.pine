@@ -3,8 +3,8 @@
 // Shows trend direction across multiple timeframes and suggests stop placement
 // based on the last confirmed swing structure (ICT methodology)
 
-//@version=5
-indicator("ICT TFA + Dynamic Stop", shortTitle="ICT TFA+SL", overlay=true)
+//@version=6
+indicator("ICT TFA + Dynamic Stop", shorttitle="ICT TFA+SL", overlay=true)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 
@@ -307,13 +307,9 @@ var table tbl = na
 
 if barstate.islast
     int rows = 1  // header
-    if show_m   => rows += 1
-    if show_w   => rows += 1
-    if show_d   => rows += 1
-    if show_4h  => rows += 1
-    if show_1h  => rows += 1
-    if show_15  => rows += 1
-    if show_cur => rows += 1
+    rows += (show_m   ? 1 : 0) + (show_w  ? 1 : 0) + (show_d  ? 1 : 0) +
+            (show_4h  ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) +
+            (show_cur ? 1 : 0)
     rows += 1  // alignment row
     rows += 1  // dominance row
     rows += 4  // stop: section header + price + dist% + dist ATR
