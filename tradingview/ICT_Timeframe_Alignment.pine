@@ -9,7 +9,7 @@ indicator("ICT Timeframe Alignment", shorttitle="ICT TFA", overlay=false)
 // ─── INPUTS ─────────────────────────────────────────────────────────────────
 
 grp_method = "Trend Method"
-method     = input.string("EMA",    "Trend Detection",  options=["EMA", "Structure"], group=grp_method)
+method     = input.string("Structure", "Trend Detection",  options=["EMA", "Structure"], group=grp_method)
 ema_fast   = input.int(20,  "Fast EMA", minval=1, group=grp_method)
 ema_slow   = input.int(50,  "Slow EMA", minval=1, group=grp_method)
 lookback   = input.int(10,  "Structure Lookback (bars)", minval=3, group=grp_method)
