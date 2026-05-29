@@ -37,6 +37,14 @@ tbl_pos     = input.string("Top Right", "Table Position",
               options=["Top Right","Top Left","Bottom Right","Bottom Left","Top Center","Bottom Center"],
               group=grp_vis)
 
+grp_lvl     = "Intraday Levels"
+show_830    = input.bool(true,  "08:30  Kerze  (News)",       group=grp_lvl,
+              tooltip="Kerzenkörper der 08:30-Kerze (NY-Zeit) als Zone bis Börsenschluss")
+show_929    = input.bool(true,  "09:29  Kerze  (Pre-Open)",   group=grp_lvl,
+              tooltip="Kerzenkörper der 09:29-Kerze (NY-Zeit) — letzter Pre-Market-Impuls")
+col_830     = input.color(color.new(#FF9800, 0), "Farbe 08:30", group=grp_lvl)
+col_929     = input.color(color.new(#2196F3, 0), "Farbe 09:29", group=grp_lvl)
+
 // ─── COLOURS ─────────────────────────────────────────────────────────────────
 
 COL_BULL   = color.new(#00C853, 0)
@@ -75,6 +83,16 @@ trend_d   = request.security(syminfo.tickerid, "D",   f_trend(), lookahead=barme
 trend_4h  = request.security(syminfo.tickerid, "240", f_trend(), lookahead=barmerge.lookahead_off)
 trend_1h  = request.security(syminfo.tickerid, "60",  f_trend(), lookahead=barmerge.lookahead_off)
 trend_15  = request.security(syminfo.tickerid, "15",  f_trend(), lookahead=barmerge.lookahead_off)
+
+// 1m candle body at 08:30 and 09:29 New York time
+// lookahead_on is intentional: we want the candle values as soon as the bar opens
+f_1m_body(h, m) =>
+    match = hour(time, "America/New_York") == h and minute(time, "America/New_York") == m
+    [match ? math.max(open, close) : float(na),
+     match ? math.min(open, close) : float(na)]
+
+[raw_top_830, raw_bot_830] = request.security(syminfo.tickerid, "1", f_1m_body(8, 30), lookahead=barmerge.lookahead_on)
+[raw_top_929, raw_bot_929] = request.security(syminfo.tickerid, "1", f_1m_body(9, 29), lookahead=barmerge.lookahead_on)
 
 // ─── ALIGNMENT SCORE ─────────────────────────────────────────────────────────
 
@@ -138,6 +156,61 @@ plotshape(show_swings and not na(swL), "Swing Low",  shape.triangleup,
 bgcolor(alignment_pct >= 70 ? color.new(COL_BULL, 95) :
         alignment_pct <= 30 ? color.new(COL_BEAR, 95) : na,
         title="Alignment Background")
+
+// ─── INTRADAY CANDLE LEVELS (08:30 / 09:29) ──────────────────────────────────
+
+// Persistent body levels — reset every new trading day
+var float top_830 = na
+var float bot_830 = na
+var float top_929 = na
+var float bot_929 = na
+
+// Line & fill handles — recreated each day
+var line     ln_830_top = na
+var line     ln_830_bot = na
+var linefill lf_830     = na
+var line     ln_929_top = na
+var line     ln_929_bot = na
+var linefill lf_929     = na
+
+// New trading day: reset all levels and delete previous lines
+if ta.change(time("D")) != 0
+    top_830 := na
+    bot_830 := na
+    top_929 := na
+    bot_929 := na
+    line.delete(ln_830_top)
+    line.delete(ln_830_bot)
+    linefill.delete(lf_830)
+    line.delete(ln_929_top)
+    line.delete(ln_929_bot)
+    linefill.delete(lf_929)
+
+// 08:30 zone — draw once when 1m data first arrives
+if show_830 and not na(raw_top_830) and na(top_830)
+    top_830    := raw_top_830
+    bot_830    := raw_bot_830
+    ln_830_top := line.new(bar_index, top_830, bar_index + 1, top_830,
+                   extend=extend.right, color=col_830, width=1, style=line.style_dashed)
+    ln_830_bot := line.new(bar_index, bot_830, bar_index + 1, bot_830,
+                   extend=extend.right, color=col_830, width=1, style=line.style_dashed)
+    lf_830     := linefill.new(ln_830_top, ln_830_bot, color=color.new(col_830, 88))
+    label.new(bar_index, top_830, "  08:30",
+              color=color.new(col_830, 80), textcolor=col_830,
+              style=label.style_label_right, size=size.small)
+
+// 09:29 zone — draw once when 1m data first arrives
+if show_929 and not na(raw_top_929) and na(top_929)
+    top_929    := raw_top_929
+    bot_929    := raw_bot_929
+    ln_929_top := line.new(bar_index, top_929, bar_index + 1, top_929,
+                   extend=extend.right, color=col_929, width=1, style=line.style_dashed)
+    ln_929_bot := line.new(bar_index, bot_929, bar_index + 1, bot_929,
+                   extend=extend.right, color=col_929, width=1, style=line.style_dashed)
+    lf_929     := linefill.new(ln_929_top, ln_929_bot, color=color.new(col_929, 88))
+    label.new(bar_index, top_929, "  09:29",
+              color=color.new(col_929, 80), textcolor=col_929,
+              style=label.style_label_right, size=size.small)
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
