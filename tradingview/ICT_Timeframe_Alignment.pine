@@ -16,7 +16,7 @@ ema_slow    = input.int(50,  "Slow EMA",  minval=1, group=grp_method)
 grp_stop    = "Dynamic Stop"
 piv_left    = input.int(5, "Pivot Left Bars",  options=[3, 5], group=grp_stop)
 piv_right   = input.int(5, "Pivot Right Bars", options=[3, 5], group=grp_stop)
-atr_len     = input.int(14,    "ATR Length",   minval=1,            group=grp_stop)
+atr_len     = input.int(14,    "ATR Length",   minval=1,             group=grp_stop)
 atr_buf     = input.float(0.5, "ATR Buffer",   minval=0.0, step=0.1, group=grp_stop,
               tooltip="Extra distance below/above pivot in ATR units")
 show_stop   = input.bool(true, "Show Stop Line",      group=grp_stop)
@@ -66,6 +66,8 @@ COL_STOP   = color.new(#FF6F00, 0)
 COL_BG     = color.new(#1E1E2E, 90)
 COL_HEADER = color.new(#2A2A3E, 80)
 COL_TEXT   = color.new(#E0E0E0, 0)
+COL_CTX    = color.new(#E65100, 60)   // context TF highlight (deep orange)
+COL_ENT    = color.new(#006064, 60)   // entry TF highlight (teal)
 
 // ─── TREND LOGIC ─────────────────────────────────────────────────────────────
 
@@ -75,9 +77,9 @@ f_trend_ema(fast, slow) =>
     f > s ? 1 : f < s ? -1 : 0
 
 // BOS / CHoCH structure tracking.
-// A confirmed pivot high is broken by a close above it → Bullish BOS.
-// A confirmed pivot low  is broken by a close below it → Bearish BOS.
-// The broken reference is cleared so the same level cannot re-trigger.
+// A confirmed pivot high broken by a close above → Bullish BOS → trend = 1.
+// A confirmed pivot low  broken by a close below → Bearish BOS → trend = -1.
+// Broken reference cleared so the same level cannot re-trigger.
 f_trend_bos(piv_l, piv_r) =>
     ph = ta.pivothigh(high, piv_l, piv_r)
     pl = ta.pivotlow(low,   piv_l, piv_r)
@@ -109,7 +111,6 @@ trend_4h  = request.security(syminfo.tickerid, "240", f_trend(), lookahead=barme
 trend_1h  = request.security(syminfo.tickerid, "60",  f_trend(), lookahead=barmerge.lookahead_off)
 trend_15  = request.security(syminfo.tickerid, "15",  f_trend(), lookahead=barmerge.lookahead_off)
 
-// 1m candle body at 08:30 and 09:29 New York time
 f_1m_body(h, m) =>
     match = hour(time, "America/New_York") == h and minute(time, "America/New_York") == m
     [match ? math.max(open, close) : float(na),
@@ -164,9 +165,6 @@ if not na(swL)
     last_swL := swL
 
 // ─── BOS / CHoCH LABELS (current TF only) ────────────────────────────────────
-// Reuses swH/swL from pivot detection above.
-// bos_ref_h/L are cleared after each break so the level cannot fire again.
-// CHoCH = break against the established trend direction (first reversal signal).
 
 var float bos_ref_h    = na
 var float bos_ref_l    = na
@@ -192,6 +190,87 @@ else if not na(bos_ref_l) and close < bos_ref_l
         label.new(bar_index, high, lbl_txt, color=color.new(lbl_col, 75), textcolor=lbl_col, style=label.style_label_down, size=size.tiny)
     bos_cur_trnd := -1
     bos_ref_l    := na
+
+// ─── TIMEFRAME PAIRING ───────────────────────────────────────────────────────
+// Maps the current chart TF to the ICT context/entry pairing:
+//   Context (HTF) = the TF that defines the bias you trade with
+//   Entry   (LTF) = the TF on which you time the actual trade
+// Rows in the trend table are highlighted accordingly:
+//   orange = context TF   teal = entry TF
+
+_ctx_key  = switch timeframe.period
+    "1"   => "15"
+    "3"   => "15"
+    "5"   => "60"
+    "15"  => "240"
+    "30"  => "240"
+    "60"  => "D"
+    "120" => "D"
+    "240" => "W"
+    "D"   => "W"
+    "W"   => "M"
+    => ""
+
+_ctx_lbl  = switch timeframe.period
+    "1"   => "15m"
+    "3"   => "15m"
+    "5"   => "1H"
+    "15"  => "4H"
+    "30"  => "4H"
+    "60"  => "Daily"
+    "120" => "Daily"
+    "240" => "Weekly"
+    "D"   => "Weekly"
+    "W"   => "Monthly"
+    => "—"
+
+_ent2_key = switch timeframe.period
+    "3"   => "1"
+    "5"   => "1"
+    "15"  => "5"
+    "30"  => "15"
+    "60"  => "15"
+    "120" => "60"
+    "240" => "60"
+    "D"   => "240"
+    "W"   => "D"
+    => ""
+
+_ent_lbl  = switch timeframe.period
+    "1"   => "1m"
+    "3"   => "3m / 1m"
+    "5"   => "5m / 1m"
+    "15"  => "15m / 5m"
+    "30"  => "30m / 15m"
+    "60"  => "1H / 15m"
+    "120" => "2H / 1H"
+    "240" => "4H / 1H"
+    "D"   => "Daily / 4H"
+    "W"   => "Weekly / Daily"
+    => timeframe.period
+
+_style_lbl = switch timeframe.period
+    "1"   => "Scalping"
+    "3"   => "Scalping"
+    "5"   => "Intraday / Scalping"
+    "15"  => "Day Trading"
+    "30"  => "Day Trading"
+    "60"  => "Day Trading"
+    "120" => "Day Trading"
+    "240" => "Position / Swing"
+    "D"   => "Swing Trading"
+    "W"   => "Swing / Position"
+    => "—"
+
+_ctx_trend = _ctx_key == "M" ? trend_m : _ctx_key == "W" ? trend_w : _ctx_key == "D" ? trend_d : _ctx_key == "240" ? trend_4h : _ctx_key == "60" ? trend_1h : _ctx_key == "15" ? trend_15 : trend_cur
+
+// Returns label-cell bg for a given TF key (context = orange, entry = teal)
+f_lbl_bg(k) =>
+    k == _ctx_key ? COL_CTX : (k == timeframe.period or (_ent2_key != "" and k == _ent2_key)) ? COL_ENT : COL_HEADER
+
+// Returns value-cell bg for a given TF key
+f_val_bg(k) =>
+    k == _ctx_key ? COL_CTX : (k == timeframe.period or (_ent2_key != "" and k == _ent2_key)) ? COL_ENT : COL_BG
 
 // ─── DYNAMIC STOP LEVEL ──────────────────────────────────────────────────────
 
@@ -316,11 +395,14 @@ _pos(s) =>
         => position.bottom_center
 
 // ─── TABLE ───────────────────────────────────────────────────────────────────
+// Row layout:
+//   1 header | TF rows (highlighted: orange=context, teal=entry) |
+//   1 alignment | 1 dominanz | 4 pairing | 4 stop | 4 mm
 
 var table tbl = na
 
 if barstate.islast
-    int rows = 1 + (show_m ? 1 : 0) + (show_w ? 1 : 0) + (show_d ? 1 : 0) + (show_4h ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) + (show_cur ? 1 : 0) + 1 + 1 + 4 + 4
+    int rows = 1 + (show_m ? 1 : 0) + (show_w ? 1 : 0) + (show_d ? 1 : 0) + (show_4h ? 1 : 0) + (show_1h ? 1 : 0) + (show_15 ? 1 : 0) + (show_cur ? 1 : 0) + 1 + 1 + 4 + 4 + 4
 
     tbl := table.new(_pos(tbl_pos), 2, rows,
          bgcolor=COL_BG, border_width=1,
@@ -333,46 +415,71 @@ if barstate.islast
     int row = 1
 
     if show_m
-        table.cell(tbl, 0, row, "Monthly",        text_color=COL_TEXT,          bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_m),  text_color=f_col(trend_m),   bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Monthly",         text_color=COL_TEXT,         bgcolor=f_lbl_bg("M"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_m),  text_color=f_col(trend_m),   bgcolor=f_val_bg("M"), text_size=size.small)
         row += 1
     if show_w
-        table.cell(tbl, 0, row, "Weekly",         text_color=COL_TEXT,          bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_w),  text_color=f_col(trend_w),   bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Weekly",          text_color=COL_TEXT,         bgcolor=f_lbl_bg("W"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_w),  text_color=f_col(trend_w),   bgcolor=f_val_bg("W"), text_size=size.small)
         row += 1
     if show_d
-        table.cell(tbl, 0, row, "Daily",          text_color=COL_TEXT,          bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_d),  text_color=f_col(trend_d),   bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "Daily",           text_color=COL_TEXT,         bgcolor=f_lbl_bg("D"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_d),  text_color=f_col(trend_d),   bgcolor=f_val_bg("D"), text_size=size.small)
         row += 1
     if show_4h
-        table.cell(tbl, 0, row, "4H",             text_color=COL_TEXT,           bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_4h), text_color=f_col(trend_4h),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "4H",              text_color=COL_TEXT,          bgcolor=f_lbl_bg("240"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_4h), text_color=f_col(trend_4h),  bgcolor=f_val_bg("240"), text_size=size.small)
         row += 1
     if show_1h
-        table.cell(tbl, 0, row, "1H",             text_color=COL_TEXT,           bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_1h), text_color=f_col(trend_1h),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "1H",              text_color=COL_TEXT,          bgcolor=f_lbl_bg("60"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_1h), text_color=f_col(trend_1h),  bgcolor=f_val_bg("60"), text_size=size.small)
         row += 1
     if show_15
-        table.cell(tbl, 0, row, "15m",            text_color=COL_TEXT,           bgcolor=COL_HEADER, text_size=size.small)
-        table.cell(tbl, 1, row, f_label(trend_15), text_color=f_col(trend_15),  bgcolor=COL_BG,     text_size=size.small)
+        table.cell(tbl, 0, row, "15m",             text_color=COL_TEXT,          bgcolor=f_lbl_bg("15"), text_size=size.small)
+        table.cell(tbl, 1, row, f_label(trend_15), text_color=f_col(trend_15),  bgcolor=f_val_bg("15"), text_size=size.small)
         row += 1
     if show_cur
+        cur_lbl_bg = f_lbl_bg(timeframe.period)
+        cur_val_bg = f_val_bg(timeframe.period)
         table.cell(tbl, 0, row, "Current (" + timeframe.period + ")",
-                   text_color=COL_TEXT, bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
+                   text_color=COL_TEXT, bgcolor=cur_lbl_bg, text_size=size.small)
         table.cell(tbl, 1, row, f_label(trend_cur),
-                   text_color=f_col(trend_cur), bgcolor=color.new(#2A2A3E, 60), text_size=size.small)
+                   text_color=f_col(trend_cur), bgcolor=cur_val_bg, text_size=size.small)
         row += 1
 
+    // Alignment
     aln_col   = alignment_pct >= 70 ? COL_BULL : alignment_pct <= 30 ? COL_BEAR : COL_NEUT
     aln_label = str.tostring(math.round(alignment_pct)) + "% aligned"
     table.cell(tbl, 0, row, "ALIGNMENT", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, aln_label,   text_color=aln_col,  bgcolor=COL_BG,     text_size=size.small)
     row += 1
 
+    // Dominanz
     table.cell(tbl, 0, row, "DOMINANZ",  text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, dom_str,     text_color=dom_col,  bgcolor=COL_BG,     text_size=size.small)
     row += 1
 
+    // ── TF PAIRING ────────────────────────────────────────────────────────────
+    // Shows which HTF to read the bias from and which LTF to time the entry on.
+    // Orange = context TF (bias), teal = entry TF (timing).
+    table.cell(tbl, 0, row, "TF PAIRING", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, timeframe.period + " Chart", text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    row += 1
+
+    ctx_val_str = _ctx_lbl + "  " + f_label(_ctx_trend)
+    table.cell(tbl, 0, row, "Kontext (HTF)", text_color=COL_TEXT,           bgcolor=COL_CTX, text_size=size.small)
+    table.cell(tbl, 1, row, ctx_val_str,     text_color=f_col(_ctx_trend),  bgcolor=COL_CTX, text_size=size.small)
+    row += 1
+
+    table.cell(tbl, 0, row, "Entry (LTF)", text_color=COL_TEXT,              bgcolor=COL_ENT, text_size=size.small)
+    table.cell(tbl, 1, row, _ent_lbl,      text_color=color.new(#80DEEA, 0), bgcolor=COL_ENT, text_size=size.small)
+    row += 1
+
+    table.cell(tbl, 0, row, "Style",     text_color=COL_TEXT, bgcolor=COL_HEADER, text_size=size.small)
+    table.cell(tbl, 1, row, _style_lbl,  text_color=COL_TEXT, bgcolor=COL_BG,     text_size=size.small)
+    row += 1
+
+    // ── STOP ──────────────────────────────────────────────────────────────────
     stop_dir_lbl = htf_bias == 1 ? "STOP  ↓ below HL" : htf_bias == -1 ? "STOP  ↑ above LH" : "STOP  (no trend)"
     table.cell(tbl, 0, row, stop_dir_lbl, text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, "─────────",  text_color=COL_STOP, bgcolor=COL_HEADER, text_size=size.small)
@@ -393,6 +500,7 @@ if barstate.islast
     table.cell(tbl, 1, row, dist_atr_str,  text_color=COL_STOP, bgcolor=COL_BG,     text_size=size.small)
     row += 1
 
+    // ── MM ZIEL ───────────────────────────────────────────────────────────────
     mm_dir_lbl = htf_bias == 1 ? "MM ZIEL  ↑ (Long)" : htf_bias == -1 ? "MM ZIEL  ↓ (Short)" : "MM ZIEL"
     table.cell(tbl, 0, row, mm_dir_lbl,  text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
     table.cell(tbl, 1, row, "─────────", text_color=col_mm, bgcolor=COL_HEADER, text_size=size.small)
