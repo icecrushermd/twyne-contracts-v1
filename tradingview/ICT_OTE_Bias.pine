@@ -55,24 +55,33 @@ COL_TEXT  = color.new(#E0E0E0, 0)
 COL_OTE_L = color.new(#FFD600, 0)
 COL_RISK  = color.new(#FF6F00, 0)
 
-// ─── TREND LOGIK (Structure) ──────────────────────────────────────────────────
+// ─── TREND LOGIK (BOS / CHoCH) ───────────────────────────────────────────────
+// Confirmed pivot high broken by close above → Bullish BOS → trend = 1
+// Confirmed pivot low  broken by close below → Bearish BOS → trend = -1
+// Broken reference cleared so same level cannot re-trigger.
 
-f_structure(lb) =>
-    if bar_index < lb * 2
-        0
-    else
-        rh = ta.highest(high,     lb)
-        rl = ta.lowest(low,       lb)
-        ph = ta.highest(high[lb], lb)
-        pl = ta.lowest(low[lb],   lb)
-        bull = rh > ph and rl > pl
-        bear = rl < pl and rh < ph
-        bull ? 1 : bear ? -1 : 0
+f_trend_bos(piv_l, piv_r) =>
+    ph = ta.pivothigh(high, piv_l, piv_r)
+    pl = ta.pivotlow(low,   piv_l, piv_r)
+    var float ref_h     = na
+    var float ref_l     = na
+    var int   bos_trend = 0
+    if not na(ph)
+        ref_h := ph
+    if not na(pl)
+        ref_l := pl
+    if not na(ref_h) and close > ref_h
+        bos_trend := 1
+        ref_h     := na
+    else if not na(ref_l) and close < ref_l
+        bos_trend := -1
+        ref_l     := na
+    bos_trend
 
-trend_cur = f_structure(10)
-trend_d   = request.security(syminfo.tickerid, "D",   f_structure(10), lookahead=barmerge.lookahead_off)
-trend_w   = request.security(syminfo.tickerid, "W",   f_structure(10), lookahead=barmerge.lookahead_off)
-trend_4h  = request.security(syminfo.tickerid, "240", f_structure(10), lookahead=barmerge.lookahead_off)
+trend_cur = f_trend_bos(piv_left, piv_right)
+trend_d   = request.security(syminfo.tickerid, "D",   f_trend_bos(piv_left, piv_right), lookahead=barmerge.lookahead_off)
+trend_w   = request.security(syminfo.tickerid, "W",   f_trend_bos(piv_left, piv_right), lookahead=barmerge.lookahead_off)
+trend_4h  = request.security(syminfo.tickerid, "240", f_trend_bos(piv_left, piv_right), lookahead=barmerge.lookahead_off)
 
 pdh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
 pdl = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
