@@ -362,12 +362,21 @@ var line     ln_t3_bot = na
 var linefill lf_t3     = na
 
 if ta.change(time("D")) != 0
-    top_t1 := na  ;  bot_t1 := na
-    top_t2 := na  ;  bot_t2 := na
-    top_t3 := na  ;  bot_t3 := na
-    line.delete(ln_t1_top)  ;  line.delete(ln_t1_bot)  ;  linefill.delete(lf_t1)
-    line.delete(ln_t2_top)  ;  line.delete(ln_t2_bot)  ;  linefill.delete(lf_t2)
-    line.delete(ln_t3_top)  ;  line.delete(ln_t3_bot)  ;  linefill.delete(lf_t3)
+    top_t1 := na
+    bot_t1 := na
+    top_t2 := na
+    bot_t2 := na
+    top_t3 := na
+    bot_t3 := na
+    line.delete(ln_t1_top)
+    line.delete(ln_t1_bot)
+    linefill.delete(lf_t1)
+    line.delete(ln_t2_top)
+    line.delete(ln_t2_bot)
+    linefill.delete(lf_t2)
+    line.delete(ln_t3_top)
+    line.delete(ln_t3_bot)
+    linefill.delete(lf_t3)
 
 if show_t1 and not na(raw_top_t1) and na(top_t1)
     top_t1    := raw_top_t1
