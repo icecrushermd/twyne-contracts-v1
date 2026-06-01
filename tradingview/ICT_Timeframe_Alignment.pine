@@ -38,13 +38,25 @@ tbl_pos     = input.string("Top Right", "Table Position",
               options=["Top Right","Top Left","Bottom Right","Bottom Left","Top Center","Bottom Center"],
               group=grp_vis)
 
-grp_lvl     = "Intraday Levels"
-show_830    = input.bool(true,  "08:30  Kerze  (News)",       group=grp_lvl,
-              tooltip="Kerzenkörper der 08:30-Kerze (NY-Zeit) als Zone bis Börsenschluss")
-show_929    = input.bool(true,  "09:29  Kerze  (Pre-Open)",   group=grp_lvl,
-              tooltip="Kerzenkörper der 09:29-Kerze (NY-Zeit) — letzter Pre-Market-Impuls")
-col_830     = input.color(color.new(#FF9800, 0), "Farbe 08:30", group=grp_lvl)
-col_929     = input.color(color.new(#2196F3, 0), "Farbe 09:29", group=grp_lvl)
+grp_lvl     = "Intraday Kerzen-Levels"
+
+show_t1     = input.bool(true,   "Zeit 1 aktiv",           group=grp_lvl)
+hour_t1     = input.int(8,       "Zeit 1 — Stunde (NY)",   minval=0, maxval=23, group=grp_lvl)
+min_t1      = input.int(30,      "Zeit 1 — Minute",        minval=0, maxval=59, group=grp_lvl)
+col_t1      = input.color(color.new(#FF9800, 0), "Zeit 1 — Farbe", group=grp_lvl)
+lbl_t1      = input.string("08:30 News", "Zeit 1 — Label", group=grp_lvl)
+
+show_t2     = input.bool(true,   "Zeit 2 aktiv",           group=grp_lvl)
+hour_t2     = input.int(9,       "Zeit 2 — Stunde (NY)",   minval=0, maxval=23, group=grp_lvl)
+min_t2      = input.int(29,      "Zeit 2 — Minute",        minval=0, maxval=59, group=grp_lvl)
+col_t2      = input.color(color.new(#2196F3, 0), "Zeit 2 — Farbe", group=grp_lvl)
+lbl_t2      = input.string("09:29 Pre-Open", "Zeit 2 — Label", group=grp_lvl)
+
+show_t3     = input.bool(false,  "Zeit 3 aktiv",           group=grp_lvl)
+hour_t3     = input.int(10,      "Zeit 3 — Stunde (NY)",   minval=0, maxval=23, group=grp_lvl)
+min_t3      = input.int(0,       "Zeit 3 — Minute",        minval=0, maxval=59, group=grp_lvl)
+col_t3      = input.color(color.new(#9C27B0, 0), "Zeit 3 — Farbe", group=grp_lvl)
+lbl_t3      = input.string("10:00 Custom", "Zeit 3 — Label", group=grp_lvl)
 
 grp_flow    = "Order Flow / Projektion"
 show_mm     = input.bool(true,  "Measured Move Ziel",          group=grp_flow,
@@ -116,8 +128,9 @@ f_1m_body(h, m) =>
     [match ? math.max(open, close) : float(na),
      match ? math.min(open, close) : float(na)]
 
-[raw_top_830, raw_bot_830] = request.security(syminfo.tickerid, "1", f_1m_body(8, 30), lookahead=barmerge.lookahead_on)
-[raw_top_929, raw_bot_929] = request.security(syminfo.tickerid, "1", f_1m_body(9, 29), lookahead=barmerge.lookahead_on)
+[raw_top_t1, raw_bot_t1] = request.security(syminfo.tickerid, "1", f_1m_body(hour_t1, min_t1), lookahead=barmerge.lookahead_on)
+[raw_top_t2, raw_bot_t2] = request.security(syminfo.tickerid, "1", f_1m_body(hour_t2, min_t2), lookahead=barmerge.lookahead_on)
+[raw_top_t3, raw_bot_t3] = request.security(syminfo.tickerid, "1", f_1m_body(hour_t3, min_t3), lookahead=barmerge.lookahead_on)
 
 // ─── ALIGNMENT SCORE ─────────────────────────────────────────────────────────
 
@@ -327,54 +340,69 @@ bgcolor(alignment_pct >= 70 ? color.new(COL_BULL, 95) :
         alignment_pct <= 30 ? color.new(COL_BEAR, 95) : na,
         title="Alignment Background")
 
-// ─── INTRADAY CANDLE LEVELS (08:30 / 09:29) ──────────────────────────────────
+// ─── INTRADAY KERZEN-LEVELS (3 konfigurierbare Zeiten) ───────────────────────
+// Jede Zone zeigt den 1m-Kerzenkörper zur angegebenen NY-Zeit als Linefill,
+// das bis Tagesende verlängert wird. Täglich neu gezeichnet.
 
-var float top_830 = na
-var float bot_830 = na
-var float top_929 = na
-var float bot_929 = na
+var float top_t1 = na
+var float bot_t1 = na
+var float top_t2 = na
+var float bot_t2 = na
+var float top_t3 = na
+var float bot_t3 = na
 
-var line     ln_830_top = na
-var line     ln_830_bot = na
-var linefill lf_830     = na
-var line     ln_929_top = na
-var line     ln_929_bot = na
-var linefill lf_929     = na
+var line     ln_t1_top = na
+var line     ln_t1_bot = na
+var linefill lf_t1     = na
+var line     ln_t2_top = na
+var line     ln_t2_bot = na
+var linefill lf_t2     = na
+var line     ln_t3_top = na
+var line     ln_t3_bot = na
+var linefill lf_t3     = na
 
 if ta.change(time("D")) != 0
-    top_830 := na
-    bot_830 := na
-    top_929 := na
-    bot_929 := na
-    line.delete(ln_830_top)
-    line.delete(ln_830_bot)
-    linefill.delete(lf_830)
-    line.delete(ln_929_top)
-    line.delete(ln_929_bot)
-    linefill.delete(lf_929)
+    top_t1 := na  ;  bot_t1 := na
+    top_t2 := na  ;  bot_t2 := na
+    top_t3 := na  ;  bot_t3 := na
+    line.delete(ln_t1_top)  ;  line.delete(ln_t1_bot)  ;  linefill.delete(lf_t1)
+    line.delete(ln_t2_top)  ;  line.delete(ln_t2_bot)  ;  linefill.delete(lf_t2)
+    line.delete(ln_t3_top)  ;  line.delete(ln_t3_bot)  ;  linefill.delete(lf_t3)
 
-if show_830 and not na(raw_top_830) and na(top_830)
-    top_830    := raw_top_830
-    bot_830    := raw_bot_830
-    ln_830_top := line.new(bar_index, top_830, bar_index + 1, top_830,
-                   extend=extend.right, color=col_830, width=1, style=line.style_dashed)
-    ln_830_bot := line.new(bar_index, bot_830, bar_index + 1, bot_830,
-                   extend=extend.right, color=col_830, width=1, style=line.style_dashed)
-    lf_830     := linefill.new(ln_830_top, ln_830_bot, color=color.new(col_830, 88))
-    label.new(bar_index, top_830, "  08:30",
-              color=color.new(col_830, 80), textcolor=col_830,
+if show_t1 and not na(raw_top_t1) and na(top_t1)
+    top_t1    := raw_top_t1
+    bot_t1    := raw_bot_t1
+    ln_t1_top := line.new(bar_index, top_t1, bar_index + 1, top_t1,
+                   extend=extend.right, color=col_t1, width=1, style=line.style_dashed)
+    ln_t1_bot := line.new(bar_index, bot_t1, bar_index + 1, bot_t1,
+                   extend=extend.right, color=col_t1, width=1, style=line.style_dashed)
+    lf_t1     := linefill.new(ln_t1_top, ln_t1_bot, color=color.new(col_t1, 88))
+    label.new(bar_index, top_t1, "  " + lbl_t1,
+              color=color.new(col_t1, 80), textcolor=col_t1,
               style=label.style_label_right, size=size.small)
 
-if show_929 and not na(raw_top_929) and na(top_929)
-    top_929    := raw_top_929
-    bot_929    := raw_bot_929
-    ln_929_top := line.new(bar_index, top_929, bar_index + 1, top_929,
-                   extend=extend.right, color=col_929, width=1, style=line.style_dashed)
-    ln_929_bot := line.new(bar_index, bot_929, bar_index + 1, bot_929,
-                   extend=extend.right, color=col_929, width=1, style=line.style_dashed)
-    lf_929     := linefill.new(ln_929_top, ln_929_bot, color=color.new(col_929, 88))
-    label.new(bar_index, top_929, "  09:29",
-              color=color.new(col_929, 80), textcolor=col_929,
+if show_t2 and not na(raw_top_t2) and na(top_t2)
+    top_t2    := raw_top_t2
+    bot_t2    := raw_bot_t2
+    ln_t2_top := line.new(bar_index, top_t2, bar_index + 1, top_t2,
+                   extend=extend.right, color=col_t2, width=1, style=line.style_dashed)
+    ln_t2_bot := line.new(bar_index, bot_t2, bar_index + 1, bot_t2,
+                   extend=extend.right, color=col_t2, width=1, style=line.style_dashed)
+    lf_t2     := linefill.new(ln_t2_top, ln_t2_bot, color=color.new(col_t2, 88))
+    label.new(bar_index, top_t2, "  " + lbl_t2,
+              color=color.new(col_t2, 80), textcolor=col_t2,
+              style=label.style_label_right, size=size.small)
+
+if show_t3 and not na(raw_top_t3) and na(top_t3)
+    top_t3    := raw_top_t3
+    bot_t3    := raw_bot_t3
+    ln_t3_top := line.new(bar_index, top_t3, bar_index + 1, top_t3,
+                   extend=extend.right, color=col_t3, width=1, style=line.style_dashed)
+    ln_t3_bot := line.new(bar_index, bot_t3, bar_index + 1, bot_t3,
+                   extend=extend.right, color=col_t3, width=1, style=line.style_dashed)
+    lf_t3     := linefill.new(ln_t3_top, ln_t3_bot, color=color.new(col_t3, 88))
+    label.new(bar_index, top_t3, "  " + lbl_t3,
+              color=color.new(col_t3, 80), textcolor=col_t3,
               style=label.style_label_right, size=size.small)
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
