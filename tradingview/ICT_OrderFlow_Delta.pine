@@ -82,10 +82,10 @@ plot(show_hist ? open_dn : na, "Open Delta",
 
 // Delta-Flip Markierung: ◆ wenn Kerze die Richtung komplett wechselte
 plotshape(show_hist and delta_flip_down, "↓ Flip",
-          shape.triangledown, location.zero,
+          shape.triangledown, location.abovebar,
           color=color.new(COL_SELL, 0), size=size.tiny)
 plotshape(show_hist and delta_flip_up, "↑ Flip",
-          shape.triangleup, location.zero,
+          shape.triangleup, location.belowbar,
           color=color.new(COL_BUY, 0), size=size.tiny)
 
 // ─── GEGLÄTTETE DELTA-LINIE ──────────────────────────────────────────────────
