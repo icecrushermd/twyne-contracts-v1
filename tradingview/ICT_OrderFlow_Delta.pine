@@ -28,13 +28,22 @@ COL_NEUT = color.new(#607D8B, 0)
 // buy_pct: 0–100 — wie viel % des Volumens war Kaufdruck
 // Kerze schließt oben in der Range → ~100 % Kauf, unten → ~0 %
 
+// Close-Position in der Range → wie die Kerze geschlossen hat (Kauf-/Verkaufsdruck)
 buy_vol  = high != low ? volume * (close - low) / (high - low) : volume * 0.5
-buy_pct  = volume > 0 ? buy_vol / volume * 100.0 : 50.0   // 0–100 %
-delta_n  = buy_pct - 50.0                                  // normiert: −50 … +50
+buy_pct  = volume > 0 ? buy_vol / volume * 100.0 : 50.0
+delta_n  = buy_pct - 50.0                                  // Close-Delta: −50 … +50
+
+// Open-Position in der Range → wo der Druck beim Kerzenstart war
+open_pct = high != low ? (open - low) / (high - low) * 100.0 : 50.0
+open_dn  = open_pct - 50.0                                 // Open-Delta: −50 … +50
+
+// Delta-Flip: Kerze startete positiv und drehte negativ (oder umgekehrt)
+delta_flip_down = open_dn > 5  and delta_n < -5            // positiv gestartet → ins Negative gedreht
+delta_flip_up   = open_dn < -5 and delta_n > 5             // negativ gestartet → ins Positive gedreht
 
 // Rollende Dominanz: Ø buy_pct über dom_len Bars (0–100 %)
-dom_avg  = ta.sma(buy_pct, dom_len)                        // 0–100 %
-dom_line = dom_avg - 50.0                                  // −50 … +50 für Darstellung
+dom_avg  = ta.sma(buy_pct, dom_len)
+dom_line = dom_avg - 50.0
 
 // Geglätteter Bar-Delta
 smooth_d = ta.ema(delta_n, smooth_len)
@@ -57,10 +66,27 @@ bgcolor(show_bg and dom_avg >= bull_th ? color.new(COL_BUY,  92) :
 // Grün = mehr Käufer als Verkäufer, Rot = umgekehrt
 // Sättigung steigt mit Stärke (hell = schwach, dunkel = stark)
 
+// ─── DELTA-KERZE: Close-Balken + Open-Punkt + Flip-Markierung ────────────────
+
 bar_col = delta_n >= 0 ? color.new(COL_BUY,  math.max(0, 80 - math.abs(delta_n) * 1.2)) : color.new(COL_SELL, math.max(0, 80 - math.abs(delta_n) * 1.2))
 
-plot(show_hist ? delta_n : na, "Bar Delta %",
+// Haupt-Balken: wo der Delta beim Close war
+plot(show_hist ? delta_n : na, "Close Delta",
      color=bar_col, style=plot.style_columns, linewidth=1)
+
+// Open-Punkt: kleiner Kreis zeigt wo der Delta beim Kerzenstart war
+// Grüner Kreis = open war positiv, Roter = open war negativ
+open_col = open_dn >= 0 ? color.new(COL_BUY, 20) : color.new(COL_SELL, 20)
+plot(show_hist ? open_dn : na, "Open Delta",
+     color=open_col, style=plot.style_circles, linewidth=3)
+
+// Delta-Flip Markierung: ◆ wenn Kerze die Richtung komplett wechselte
+plotshape(show_hist and delta_flip_down, "↓ Flip",
+          shape.triangledown, location.zero,
+          color=color.new(COL_SELL, 0), size=size.tiny)
+plotshape(show_hist and delta_flip_up, "↑ Flip",
+          shape.triangleup, location.zero,
+          color=color.new(COL_BUY, 0), size=size.tiny)
 
 // ─── GEGLÄTTETE DELTA-LINIE ──────────────────────────────────────────────────
 
