@@ -75,11 +75,13 @@ dom_col = dom_avg >= bull_th ? COL_BUY : dom_avg <= bear_th ? COL_SELL : COL_NEU
 plot(show_dom ? dom_line : na, "Dominanz Ø",
      color=dom_col, linewidth=2, style=plot.style_line)
 
-// ─── LABEL AUF LETZTEM BAR ───────────────────────────────────────────────────
+// ─── INFO-TABELLE (fixe Ecke, kein Overlap) ──────────────────────────────────
+
+var table info_tbl = table.new(position.top_right, 1, 1,
+     bgcolor=color.new(#1E1E2E, 70), border_width=1,
+     border_color=color.new(#444466, 60))
 
 if barstate.islast
-    pct_str = str.tostring(math.round(dom_avg, 1)) + "%"
-    lbl     = dom_avg >= bull_th ? "▲ Käufer " + pct_str : dom_avg <= bear_th ? "▼ Verkäufer " + pct_str : "● Neutral " + pct_str
-    label.new(bar_index, dom_line, "  " + lbl,
-              color=color.new(dom_col, 80), textcolor=dom_col,
-              style=label.style_label_left, size=size.small)
+    pct_str  = str.tostring(math.round(dom_avg, 1)) + "%"
+    lbl      = dom_avg >= bull_th ? "▲ Käufer " + pct_str : dom_avg <= bear_th ? "▼ Verkäufer " + pct_str : "● Neutral " + pct_str
+    table.cell(info_tbl, 0, 0, lbl, text_color=dom_col, text_size=size.small)
