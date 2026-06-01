@@ -47,10 +47,31 @@ dis_atr_len   = input.int(14,     "ATR Länge",               group=grp_dis, min
 col_dis_bull  = input.color(color.new(#00E676, 60), "Bull Displacement", group=grp_dis)
 col_dis_bear  = input.color(color.new(#FF1744, 60), "Bear Displacement", group=grp_dis)
 
+grp_vd        = "Vol + Delta Labels"
+show_vd       = input.bool(true, "Vol/Delta in FVG & OB Labels", group=grp_vd,
+                tooltip="Zeigt Volumen und Kauf-Delta der Entstehungskerze direkt im Label")
+
 // ─── FARBEN ──────────────────────────────────────────────────────────────────
 
 COL_BULL = color.new(#00C853, 0)
 COL_BEAR = color.new(#D50000, 0)
+
+// ─── HELPER: VOL + DELTA FORMATIERUNG ────────────────────────────────────────
+
+f_vol(v) =>
+    if v >= 1000000.0
+        str.tostring(math.round(v / 1000000.0, 2)) + "M"
+    else if v >= 1000.0
+        str.tostring(math.round(v / 1000.0, 1)) + "K"
+    else
+        str.tostring(math.round(v, 0))
+
+f_dlt(d) =>
+    (d >= 0 ? "Δ+" : "Δ") + str.tostring(math.round(d, 0))
+
+f_bar_delta(vol, hi, lo, cl) =>
+    bv = hi != lo ? vol * (cl - lo) / (hi - lo) : vol * 0.5
+    vol > 0 ? bv / vol * 100.0 - 50.0 : 0.0
 
 // ─── FAIR VALUE GAPS ─────────────────────────────────────────────────────────
 // Bullish FVG : low[0] > high[2]
@@ -81,7 +102,8 @@ if show_fvg and barstate.isconfirmed
         ml  = show_fvg_mid ?
               line.new(x1=bar_index - 2, y1=mid, x2=bar_index + 1, y2=mid,
                        color=color.new(COL_BULL, 50), style=line.style_dotted) : na
-        label.new(x=bar_index, y=ft, text=" FVG",
+        fvg_vd = show_vd ? "\n" + f_vol(volume[1]) + "  " + f_dlt(f_bar_delta(volume[1], high[1], low[1], close[1])) : ""
+        label.new(x=bar_index, y=ft, text=" FVG" + fvg_vd,
                   color=color.new(COL_BULL, 70), textcolor=COL_BULL,
                   style=label.style_label_left, size=size.tiny)
         array.push(bull_fvg, b)
@@ -100,7 +122,8 @@ if show_fvg and barstate.isconfirmed
         ml2  = show_fvg_mid ?
                line.new(x1=bar_index - 2, y1=mid2, x2=bar_index + 1, y2=mid2,
                         color=color.new(COL_BEAR, 50), style=line.style_dotted) : na
-        label.new(x=bar_index, y=ft2, text=" FVG",
+        fvg_vd2 = show_vd ? "\n" + f_vol(volume[1]) + "  " + f_dlt(f_bar_delta(volume[1], high[1], low[1], close[1])) : ""
+        label.new(x=bar_index, y=ft2, text=" FVG" + fvg_vd2,
                   color=color.new(COL_BEAR, 70), textcolor=COL_BEAR,
                   style=label.style_label_left, size=size.tiny)
         array.push(bear_fvg, b2)
@@ -214,7 +237,8 @@ if show_ob and barstate.isconfirmed
     if bull_impulse and prev_bearish
         b = box.new(left=bar_index - 1, top=open[1], right=bar_index + 1, bottom=close[1],
                     bgcolor=col_bull_ob, border_color=color.new(COL_BULL, 30), border_width=1)
-        label.new(x=bar_index - 1, y=open[1], text=" Bull OB",
+        ob_vd = show_vd ? "\n" + f_vol(volume[1]) + "  " + f_dlt(f_bar_delta(volume[1], high[1], low[1], close[1])) : ""
+        label.new(x=bar_index - 1, y=open[1], text=" Bull OB" + ob_vd,
                   color=color.new(COL_BULL, 60), textcolor=COL_BULL,
                   style=label.style_label_right, size=size.tiny)
         array.push(bull_ob, b)
@@ -224,7 +248,8 @@ if show_ob and barstate.isconfirmed
     if bear_impulse and prev_bullish
         b2 = box.new(left=bar_index - 1, top=close[1], right=bar_index + 1, bottom=open[1],
                      bgcolor=col_bear_ob, border_color=color.new(COL_BEAR, 30), border_width=1)
-        label.new(x=bar_index - 1, y=close[1], text=" Bear OB",
+        ob_vd2 = show_vd ? "\n" + f_vol(volume[1]) + "  " + f_dlt(f_bar_delta(volume[1], high[1], low[1], close[1])) : ""
+        label.new(x=bar_index - 1, y=close[1], text=" Bear OB" + ob_vd2,
                   color=color.new(COL_BEAR, 60), textcolor=COL_BEAR,
                   style=label.style_label_right, size=size.tiny)
         array.push(bear_ob, b2)
