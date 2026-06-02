@@ -20,33 +20,84 @@ show_bg    = input.bool(true,  "Hintergrundfarbe bei Dominanz",    group=grp_vis
 bull_th    = input.int(60,     "Bull-Schwelle (%)",  minval=51, maxval=99, group=grp_vis)
 bear_th    = input.int(40,     "Bear-Schwelle (%)",  minval=1,  maxval=49, group=grp_vis)
 
+grp_vsa    = "VSA (Volume Spread Analysis)"
+show_vsa   = input.bool(true,  "VSA Signale anzeigen",          group=grp_vsa)
+show_nd_ns = input.bool(true,  "No Demand / No Supply",         group=grp_vsa,
+             tooltip="Enge Range + niedriges Volumen: kein institutionelles Interesse an dieser Kerze")
+show_sv_clx = input.bool(true, "Stopping Vol / Climax",         group=grp_vsa,
+             tooltip="SV: Down-Bar + hohes Vol + Close oben | SC/BC: extremes Vol + weite Range")
+show_abs   = input.bool(true,  "Absorption (Effort ≠ Result)",  group=grp_vsa,
+             tooltip="Sehr hohes Volumen aber enge Range → Druck wird unsichtbar absorbiert")
+vsa_vol_len = input.int(20,    "Vol Ø Lookback",       minval=5,         group=grp_vsa)
+vsa_low_th  = input.float(0.7, "Niedriges Vol (× Ø)",  minval=0.1, step=0.1, group=grp_vsa)
+vsa_high_th = input.float(1.5, "Hohes Vol (× Ø)",      minval=1.0, step=0.1, group=grp_vsa)
+vsa_clx_th  = input.float(2.0, "Climax Vol (× Ø)",     minval=1.5, step=0.1, group=grp_vsa)
+vsa_rng_th  = input.float(0.7, "Enge Range (× ATR)",   minval=0.1, step=0.1, group=grp_vsa)
+vsa_wide_th = input.float(1.5, "Weite Range (× ATR)",  minval=1.0, step=0.1, group=grp_vsa)
+vsa_atr_len = input.int(14,    "ATR Länge",             minval=1,         group=grp_vsa)
+
+// ─── FARBEN ──────────────────────────────────────────────────────────────────
+
 COL_BUY  = color.new(#00C853, 0)
 COL_SELL = color.new(#D50000, 0)
 COL_NEUT = color.new(#607D8B, 0)
+COL_SV   = color.new(#00E5FF, 0)   // Stopping Volume / No Supply
+COL_CLX  = color.new(#FF6F00, 0)   // Climax (SC / BC)
+COL_ABS  = color.new(#FFD600, 0)   // Absorption
 
 // ─── DELTA BERECHNUNG ────────────────────────────────────────────────────────
-// buy_pct: 0–100 — wie viel % des Volumens war Kaufdruck
-// Kerze schließt oben in der Range → ~100 % Kauf, unten → ~0 %
 
-// Close-Position in der Range → wie die Kerze geschlossen hat (Kauf-/Verkaufsdruck)
 buy_vol  = high != low ? volume * (close - low) / (high - low) : volume * 0.5
 buy_pct  = volume > 0 ? buy_vol / volume * 100.0 : 50.0
-delta_n  = buy_pct - 50.0                                  // Close-Delta: −50 … +50
+delta_n  = buy_pct - 50.0
 
-// Open-Position in der Range → wo der Druck beim Kerzenstart war
 open_pct = high != low ? (open - low) / (high - low) * 100.0 : 50.0
-open_dn  = open_pct - 50.0                                 // Open-Delta: −50 … +50
+open_dn  = open_pct - 50.0
 
-// Delta-Flip: Kerze startete positiv und drehte negativ (oder umgekehrt)
-delta_flip_down = open_dn > 5  and delta_n < -5            // positiv gestartet → ins Negative gedreht
-delta_flip_up   = open_dn < -5 and delta_n > 5             // negativ gestartet → ins Positive gedreht
+delta_flip_down = open_dn > 5  and delta_n < -5
+delta_flip_up   = open_dn < -5 and delta_n > 5
 
-// Rollende Dominanz: Ø buy_pct über dom_len Bars (0–100 %)
 dom_avg  = ta.sma(buy_pct, dom_len)
 dom_line = dom_avg - 50.0
 
-// Geglätteter Bar-Delta
 smooth_d = ta.ema(delta_n, smooth_len)
+
+// ─── VSA BERECHNUNG ──────────────────────────────────────────────────────────
+// Analysiert Volumen × Range × Close-Position um institutionelle Aktivität zu erkennen.
+
+vol_avg   = ta.sma(volume, vsa_vol_len)
+vsa_atr   = ta.atr(vsa_atr_len)
+bar_range = high - low
+close_pos = bar_range > 0 ? (close - low) / bar_range : 0.5   // 0 = Tief, 1 = Hoch
+is_up_bar = close >= open
+
+is_low_vol  = volume < vol_avg * vsa_low_th
+is_high_vol = volume > vol_avg * vsa_high_th
+is_clx_vol  = volume > vol_avg * vsa_clx_th
+is_narrow   = bar_range < vsa_atr * vsa_rng_th
+is_wide     = bar_range > vsa_atr * vsa_wide_th
+
+// No Demand: enge Range + niedriges Vol + bearishe Kerze → kein Kaufdruck
+vsa_nd = show_vsa and show_nd_ns and is_narrow and is_low_vol and not is_up_bar
+
+// No Supply: enge Range + niedriges Vol + bullishe Kerze → kein Verkaufsdruck
+vsa_ns = show_vsa and show_nd_ns and is_narrow and is_low_vol and is_up_bar
+
+// Stopping Volume: Down-Kerze + hohes Vol + Close im oberen 40% → Institutionelles Kaufen stoppt den Fall
+vsa_sv = show_vsa and show_sv_clx and not is_up_bar and is_high_vol and close_pos >= 0.6 and not is_clx_vol
+
+// Selling Climax: breite Down-Kerze + extremes Vol → Erschöpfung der Verkäufer
+vsa_sc = show_vsa and show_sv_clx and not is_up_bar and is_wide and is_clx_vol
+
+// Buying Climax: breite Up-Kerze + extremes Vol → Erschöpfung der Käufer
+vsa_bc = show_vsa and show_sv_clx and is_up_bar and is_wide and is_clx_vol
+
+// Absorption: sehr hohes Vol + enge Range → Unsichtbarer Widerstand/Unterstützung absorbiert Druck
+vsa_abs = show_vsa and show_abs and is_high_vol and is_narrow and not vsa_sc and not vsa_bc
+
+// Letztes VSA-Signal für Info-Tabelle
+vsa_lbl = vsa_sc ? "SC — Sell Climax" : vsa_bc ? "BC — Buy Climax" : vsa_sv ? "SV — Stopping Vol" : vsa_nd ? "ND — No Demand" : vsa_ns ? "NS — No Supply" : vsa_abs ? "Abs — Absorption" : ""
+vsa_col = (vsa_sc or vsa_nd or vsa_bc) ? COL_SELL : (vsa_sv or vsa_ns) ? COL_BUY : (vsa_abs) ? COL_ABS : COL_NEUT
 
 // ─── REFERENZLINIEN ──────────────────────────────────────────────────────────
 
@@ -62,25 +113,17 @@ bgcolor(show_bg and dom_avg >= bull_th ? color.new(COL_BUY,  92) :
         show_bg and dom_avg <= bear_th ? color.new(COL_SELL, 92) : na,
         title="Dominanz Hintergrund")
 
-// ─── BAR-DELTA HISTOGRAMM ─────────────────────────────────────────────────────
-// Grün = mehr Käufer als Verkäufer, Rot = umgekehrt
-// Sättigung steigt mit Stärke (hell = schwach, dunkel = stark)
-
 // ─── DELTA-KERZE: Close-Balken + Open-Punkt + Flip-Markierung ────────────────
 
 bar_col = delta_n >= 0 ? color.new(COL_BUY,  math.max(0, 80 - math.abs(delta_n) * 1.2)) : color.new(COL_SELL, math.max(0, 80 - math.abs(delta_n) * 1.2))
 
-// Haupt-Balken: wo der Delta beim Close war
 plot(show_hist ? delta_n : na, "Close Delta",
      color=bar_col, style=plot.style_columns, linewidth=1)
 
-// Open-Punkt: kleiner Kreis zeigt wo der Delta beim Kerzenstart war
-// Grüner Kreis = open war positiv, Roter = open war negativ
 open_col = open_dn >= 0 ? color.new(COL_BUY, 20) : color.new(COL_SELL, 20)
 plot(show_hist ? open_dn : na, "Open Delta",
      color=open_col, style=plot.style_circles, linewidth=3)
 
-// Delta-Flip Markierung: ◆ wenn Kerze die Richtung komplett wechselte
 plotshape(show_hist and delta_flip_down, "↓ Flip",
           shape.triangledown, location.abovebar,
           color=color.new(COL_SELL, 0), size=size.tiny)
@@ -101,13 +144,54 @@ dom_col = dom_avg >= bull_th ? COL_BUY : dom_avg <= bear_th ? COL_SELL : COL_NEU
 plot(show_dom ? dom_line : na, "Dominanz Ø",
      color=dom_col, linewidth=2, style=plot.style_line)
 
-// ─── INFO-TABELLE (fixe Ecke, kein Overlap) ──────────────────────────────────
+// ─── VSA SIGNALE ─────────────────────────────────────────────────────────────
+// Bearische Signale → abovebar  |  Bullische Signale → belowbar
 
-var table info_tbl = table.new(position.top_right, 1, 1,
+// No Demand: bearisher Kontext — kein Kaufdruck bei enger Kerze
+plotshape(vsa_nd, "No Demand",
+          shape.circle, location.abovebar,
+          color=color.new(COL_SELL, 30), textcolor=COL_SELL,
+          size=size.tiny, text="ND")
+
+// No Supply: bullisher Kontext — kein Verkaufsdruck bei enger Kerze
+plotshape(vsa_ns, "No Supply",
+          shape.circle, location.belowbar,
+          color=color.new(COL_BUY, 30), textcolor=COL_BUY,
+          size=size.tiny, text="NS")
+
+// Stopping Volume: Institutionelles Kaufen stoppt den Fall
+plotshape(vsa_sv, "Stopping Volume",
+          shape.diamond, location.belowbar,
+          color=color.new(COL_SV, 20), textcolor=COL_SV,
+          size=size.small, text="SV")
+
+// Selling Climax: Erschöpfung der Verkäufer — mögliche Umkehr nach oben
+plotshape(vsa_sc, "Selling Climax",
+          shape.labelup, location.belowbar,
+          color=color.new(COL_CLX, 20), textcolor=COL_CLX,
+          size=size.small, text="SC")
+
+// Buying Climax: Erschöpfung der Käufer — mögliche Umkehr nach unten
+plotshape(vsa_bc, "Buying Climax",
+          shape.labeldown, location.abovebar,
+          color=color.new(COL_CLX, 20), textcolor=COL_CLX,
+          size=size.small, text="BC")
+
+// Absorption: hohes Volumen — unsichtbare Kraft absorbiert den Druck
+plotshape(vsa_abs, "Absorption",
+          shape.square, location.abovebar,
+          color=color.new(COL_ABS, 30), textcolor=COL_ABS,
+          size=size.tiny, text="Abs")
+
+// ─── INFO-TABELLE ─────────────────────────────────────────────────────────────
+
+var table info_tbl = table.new(position.top_right, 1, 2,
      bgcolor=color.new(#1E1E2E, 70), border_width=1,
      border_color=color.new(#444466, 60))
 
 if barstate.islast
-    pct_str  = str.tostring(math.round(dom_avg, 1)) + "%"
-    lbl      = dom_avg >= bull_th ? "▲ Käufer " + pct_str : dom_avg <= bear_th ? "▼ Verkäufer " + pct_str : "● Neutral " + pct_str
+    pct_str = str.tostring(math.round(dom_avg, 1)) + "%"
+    lbl     = dom_avg >= bull_th ? "▲ Käufer " + pct_str : dom_avg <= bear_th ? "▼ Verkäufer " + pct_str : "● Neutral " + pct_str
     table.cell(info_tbl, 0, 0, lbl, text_color=dom_col, text_size=size.small)
+    table.cell(info_tbl, 0, 1, vsa_lbl != "" ? vsa_lbl : "─ VSA: kein Signal",
+               text_color=vsa_lbl != "" ? vsa_col : color.new(#607D8B, 60), text_size=size.small)
