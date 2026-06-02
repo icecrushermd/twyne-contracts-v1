@@ -1,0 +1,158 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// ICT Levels & Sessions
+// Kill Zones (London / New York / London Close)
+// Session Highs/Lows (Asian Range, London Range)
+// Previous Day High / Low / Close
+
+//@version=6
+indicator("ICT Levels & Sessions", shorttitle="ICT L&S", overlay=true)
+
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
+
+grp_kz    = "Kill Zones  (NY-Zeit)"
+show_lkz  = input.bool(true, "London Kill Zone   02:00 – 05:00", group=grp_kz)
+show_nykz = input.bool(true, "New York Kill Zone  07:00 – 11:00", group=grp_kz)
+show_lc   = input.bool(true, "London Close        10:00 – 12:00", group=grp_kz)
+show_kz_lbl = input.bool(true, "Kill Zone Labels", group=grp_kz)
+col_lkz   = input.color(color.new(#FF6F00, 84), "Farbe London KZ",   group=grp_kz)
+col_nykz  = input.color(color.new(#1565C0, 84), "Farbe NY KZ",       group=grp_kz)
+col_lc    = input.color(color.new(#6A1B9A, 84), "Farbe London Close", group=grp_kz)
+
+grp_sess  = "Session Highs / Lows  (NY-Zeit)"
+show_asia = input.bool(true, "Asian Range   00:00 – 07:00", group=grp_sess,
+            tooltip="Overnight-Bereich. Wird in London/NY oft als Liquidität gesweept.")
+show_ldn  = input.bool(true, "London Range  02:00 – 07:00", group=grp_sess)
+show_ny   = input.bool(true, "NY Range      07:00 – 09:30", group=grp_sess)
+col_asia  = input.color(color.new(#FF9800, 0), "Farbe Asian",  group=grp_sess)
+col_ldn   = input.color(color.new(#29B6F6, 0), "Farbe London", group=grp_sess)
+col_ny    = input.color(color.new(#AB47BC, 0), "Farbe NY Pre", group=grp_sess)
+
+grp_pd    = "Previous Day"
+show_pd   = input.bool(true, "PDH / PDL / PDC anzeigen", group=grp_pd,
+            tooltip="Previous Day High/Low/Close — wichtige tägliche Liquiditätsziele")
+col_pdh   = input.color(color.new(#EF5350, 0), "PDH Farbe", group=grp_pd)
+col_pdl   = input.color(color.new(#66BB6A, 0), "PDL Farbe", group=grp_pd)
+col_pdc   = input.color(color.new(#90A4AE, 0), "PDC Farbe", group=grp_pd)
+show_pdw  = input.bool(true, "PWH / PWL anzeigen (Previous Week)", group=grp_pd)
+col_pwh   = input.color(color.new(#FF1744, 0), "PWH Farbe", group=grp_pd)
+col_pwl   = input.color(color.new(#00E676, 0), "PWL Farbe", group=grp_pd)
+
+// ─── ZEIT ────────────────────────────────────────────────────────────────────
+
+ny_h    = hour(time, "America/New_York")
+ny_m    = minute(time, "America/New_York")
+ny_min  = ny_h * 60 + ny_m   // Minuten seit Mitternacht NY
+
+// ─── KILL ZONES ──────────────────────────────────────────────────────────────
+
+in_lkz  = show_lkz  and ny_min >= 120  and ny_min < 300   // 02:00–05:00
+in_nykz = show_nykz and ny_min >= 420  and ny_min < 660   // 07:00–11:00
+in_lc   = show_lc   and ny_min >= 600  and ny_min < 720   // 10:00–12:00
+
+// Hintergrundfarbe — Priorität: NY KZ > London KZ > London Close
+bgcolor(in_nykz ? col_nykz : in_lkz ? col_lkz : in_lc ? col_lc : na,
+        title="Kill Zone Hintergrund")
+
+// Labels beim ersten Bar jeder Zone
+if show_kz_lbl
+    prev_min = ny_h[1] * 60 + ny_m[1]
+    if show_lkz  and ny_min >= 120 and prev_min < 120
+        label.new(bar_index, high * 1.0005, "▶ London KZ",
+                  color=color.new(col_lkz, 50), textcolor=col_lkz,
+                  style=label.style_label_down, size=size.tiny)
+    if show_nykz and ny_min >= 420 and prev_min < 420
+        label.new(bar_index, high * 1.0005, "▶ NY KZ",
+                  color=color.new(col_nykz, 50), textcolor=col_nykz,
+                  style=label.style_label_down, size=size.tiny)
+    if show_lc   and ny_min >= 600 and prev_min < 600
+        label.new(bar_index, high * 1.0005, "▶ London Close",
+                  color=color.new(col_lc, 50), textcolor=col_lc,
+                  style=label.style_label_down, size=size.tiny)
+
+// ─── PREVIOUS DAY & WEEK HIGH / LOW / CLOSE ──────────────────────────────────
+
+pdh  = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+pdl  = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+pdc  = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+pwh  = request.security(syminfo.tickerid, "W", high[1],  lookahead=barmerge.lookahead_on)
+pwl  = request.security(syminfo.tickerid, "W", low[1],   lookahead=barmerge.lookahead_on)
+
+plot(show_pd  ? pdh : na, "PDH", color=col_pdh, linewidth=1, style=plot.style_linebr)
+plot(show_pd  ? pdl : na, "PDL", color=col_pdl, linewidth=1, style=plot.style_linebr)
+plot(show_pd  ? pdc : na, "PDC", color=col_pdc, linewidth=1, style=plot.style_linebr)
+plot(show_pdw ? pwh : na, "PWH", color=col_pwh, linewidth=2, style=plot.style_linebr)
+plot(show_pdw ? pwl : na, "PWL", color=col_pwl, linewidth=2, style=plot.style_linebr)
+
+// Labels für PDH/PDL/PDC/PWH/PWL beim Tageswechsel
+new_day  = ta.change(time("D")) != 0
+new_week = ta.change(time("W")) != 0
+
+if show_pd and new_day
+    label.new(bar_index, pdh, "PDH " + str.tostring(pdh, format.mintick),
+              color=color.new(col_pdh, 70), textcolor=col_pdh,
+              style=label.style_label_right, size=size.tiny)
+    label.new(bar_index, pdl, "PDL " + str.tostring(pdl, format.mintick),
+              color=color.new(col_pdl, 70), textcolor=col_pdl,
+              style=label.style_label_right, size=size.tiny)
+    label.new(bar_index, pdc, "PDC " + str.tostring(pdc, format.mintick),
+              color=color.new(col_pdc, 70), textcolor=col_pdc,
+              style=label.style_label_right, size=size.tiny)
+if show_pdw and new_week
+    label.new(bar_index, pwh, "PWH " + str.tostring(pwh, format.mintick),
+              color=color.new(col_pwh, 70), textcolor=col_pwh,
+              style=label.style_label_right, size=size.tiny)
+    label.new(bar_index, pwl, "PWL " + str.tostring(pwl, format.mintick),
+              color=color.new(col_pwl, 70), textcolor=col_pwl,
+              style=label.style_label_right, size=size.tiny)
+
+// ─── SESSION HIGH / LOW TRACKING ─────────────────────────────────────────────
+
+// Jede Session wird täglich resettet und während ihres Zeitfensters aufgebaut.
+// Die Linien zeigen nach Session-Ende den finalen H/L bis zum nächsten Tag.
+
+var float asia_h = na
+var float asia_l = na
+var float ldn_h  = na
+var float ldn_l  = na
+var float ny_h_  = na
+var float ny_l_  = na
+
+if new_day
+    asia_h := na
+    asia_l := na
+    ldn_h  := na
+    ldn_l  := na
+    ny_h_  := na
+    ny_l_  := na
+
+in_asia_sess = ny_h >= 0 and ny_h < 7
+in_ldn_sess  = ny_h >= 2 and ny_h < 7
+in_ny_pre    = ny_min >= 420 and ny_min < 570  // 07:00–09:30
+
+if show_asia and in_asia_sess
+    asia_h := na(asia_h) ? high : math.max(asia_h, high)
+    asia_l := na(asia_l) ? low  : math.min(asia_l, low)
+
+if show_ldn and in_ldn_sess
+    ldn_h := na(ldn_h) ? high : math.max(ldn_h, high)
+    ldn_l := na(ldn_l) ? low  : math.min(ldn_l, low)
+
+if show_ny and in_ny_pre
+    ny_h_ := na(ny_h_) ? high : math.max(ny_h_, high)
+    ny_l_ := na(ny_l_) ? low  : math.min(ny_l_, low)
+
+plot(show_asia ? asia_h : na, "Asian High", color=col_asia, linewidth=1, style=plot.style_linebr)
+plot(show_asia ? asia_l : na, "Asian Low",  color=col_asia, linewidth=1, style=plot.style_linebr)
+plot(show_ldn  ? ldn_h  : na, "London High",color=col_ldn,  linewidth=1, style=plot.style_linebr)
+plot(show_ldn  ? ldn_l  : na, "London Low", color=col_ldn,  linewidth=1, style=plot.style_linebr)
+plot(show_ny   ? ny_h_  : na, "NY Pre High",color=col_ny,   linewidth=1, style=plot.style_linebr)
+plot(show_ny   ? ny_l_  : na, "NY Pre Low", color=col_ny,   linewidth=1, style=plot.style_linebr)
+
+// Sweep-Erkennung: Price bricht Session H/L und kehrt zurück → klassischer ICT Sweep
+asia_swept_high = show_asia and not na(asia_h) and not in_asia_sess and high > asia_h and close < asia_h
+asia_swept_low  = show_asia and not na(asia_l) and not in_asia_sess and low  < asia_l and close > asia_l
+
+plotshape(asia_swept_high, "Asian High Sweep", shape.xcross,
+          location.abovebar, color.new(col_asia, 0), size=size.tiny)
+plotshape(asia_swept_low,  "Asian Low Sweep",  shape.xcross,
+          location.belowbar, color.new(col_asia, 0), size=size.tiny)
