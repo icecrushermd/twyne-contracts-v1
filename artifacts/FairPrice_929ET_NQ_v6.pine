@@ -78,9 +78,10 @@ isNySession() =>
 
 // Datum als String (ET) für Tageswechsel-Erkennung
 currentDateET() =>
-    str.tostring(dayofmonth(time, "America/New_York")) + "." +
-    str.tostring(month     (time, "America/New_York")) + "." +
-    str.tostring(year      (time, "America/New_York"))
+    d = str.tostring(dayofmonth(time, "America/New_York"))
+    m = str.tostring(month(time, "America/New_York"))
+    y = str.tostring(year(time, "America/New_York"))
+    d + "." + m + "." + y
 
 // ============================================================
 // ── FAIR PRICE: 15m-Close der 09:15-ET-Kerze ──────────────
