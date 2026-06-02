@@ -1,0 +1,354 @@
+// ============================================================
+// Fair Price 9:29 ET – NQ Nasdaq Futures
+// Version : 1.0
+// Plattform: TradingView Pine Script v5
+// Autor    : Für deutschsprachige Trader
+//
+// KONZEPT:
+//   Der "Fair Price" ist der Schlusskurs der 09:15-ET-15m-Kerze
+//   (die letzte vollständige 15m-Kerze vor der NY-Eröffnung um 09:30 ET).
+//   Statistik: 73,5 % aller NY-Sessions kehren zu diesem Level zurück.
+//   47 % davon bereits in den ersten 15 Minuten nach der Eröffnung.
+//
+// FUNKTIONEN:
+//   • Erkennt täglich die 09:15-ET-15m-Kerze und speichert deren Close
+//   • Zeichnet ab 09:30 ET eine gestrichelte Orange-Linie auf diesem Level
+//   • Färbt den Hintergrund grün (Preis > FP) oder rot (Preis < FP)
+//   • Markiert den ersten Rückkehrer-Balken mit einem grünen Kreis
+//   • Zeigt eine Statistik-Tabelle (oben rechts) mit Tageszählung und Return-%
+//   • Versteckt alles außerhalb der NY-Session (09:30–16:00 ET)
+// ============================================================
+
+//@version=5
+indicator(
+     title     = "Fair Price 9:29 ET (NQ)",
+     shorttitle= "FP 9:29",
+     overlay   = true,
+     max_lines_count  = 500,
+     max_labels_count = 500
+ )
+
+// ============================================================
+// ── EINGABEN (INPUTS) ──────────────────────────────────────
+// ============================================================
+
+// Gruppe: Visuelles
+i_fpLineColor   = input.color(color.new(color.orange, 0),   "FP-Linienfarbe",        group="Visuelles")
+i_fpLineWidth   = input.int(2,                               "Linienbreite",          group="Visuelles", minval=1, maxval=4)
+i_zonePoints    = input.float(5.0,                           "Zone ± Punkte",         group="Visuelles", minval=0.0, step=0.5)
+i_zoneBullColor = input.color(color.new(color.green, 88),   "Zonen-Farbe Bullen",    group="Visuelles")
+i_zoneNullColor = input.color(color.new(color.gray,  90),   "Zonen-Farbe Neutral",   group="Visuelles")
+i_zoneBearColor = input.color(color.new(color.red,   88),   "Zonen-Farbe Bären",     group="Visuelles")
+i_bgBullColor   = input.color(color.new(color.green, 94),   "Hintergrund Bullen",    group="Visuelles")
+i_bgBearColor   = input.color(color.new(color.red,   94),   "Hintergrund Bären",     group="Visuelles")
+i_showBg        = input.bool(true,                           "Hintergrundfarbe zeigen", group="Visuelles")
+i_returnColor   = input.color(color.new(color.lime,  0),    "Return-Marker Farbe",   group="Visuelles")
+
+// Gruppe: Statistik-Tabelle
+i_showTable     = input.bool(true,  "Tabelle anzeigen",     group="Tabelle")
+i_tablePos      = input.string("top_right", "Position",     group="Tabelle",
+                     options=["top_right","top_left","bottom_right","bottom_left"])
+
+// Gruppe: Debug / Entwickler
+i_showDebugLabel = input.bool(false, "Debug-Label (Entwickler)", group="Debug")
+
+// ============================================================
+// ── HILFSFUNKTIONEN ───────────────────────────────────────
+// ============================================================
+
+// Gibt true zurück, wenn wir uns in der NY-Session befinden (09:30–16:00 ET)
+// DST wird automatisch durch "America/New_York" abgehandelt.
+isNySession() =>
+    h = hour(time, "America/New_York")
+    m = minute(time, "America/New_York")
+    timeMinutes = h * 60 + m
+    // 09:30 = 570 Minuten, 16:00 = 960 Minuten
+    timeMinutes >= 570 and timeMinutes < 960
+
+// Gibt true zurück, wenn dieser Balken zur 09:15-ET-15m-Kerze gehört
+// (Balken, der um 09:15 ET öffnet und um 09:30 ET schließt)
+is0915Candle15m() =>
+    h = hour(time, "America/New_York")
+    m = minute(time, "America/New_York")
+    // timeframe.in_seconds("15") == 900
+    // Wir prüfen die Startzeit der Kerze: 09:15 ET
+    h == 9 and m == 15 and timeframe.in_seconds() <= 900
+
+// ============================================================
+// ── FAIR PRICE: 15m-CLOSE DER 09:15-ET-KERZE ─────────────
+// ============================================================
+// Methode: request.security mit "15" (15m-Chart) + ta.valuewhen
+// barmerge.lookahead_off verhindert Look-ahead-Bias (kein Repainting)
+
+// Auf dem 15m-Chart den Close der 09:15-ET-Kerze identifizieren
+f_get15mClose() =>
+    h15 = hour(time, "America/New_York")
+    m15 = minute(time, "America/New_York")
+    // Die 09:15-Kerze auf dem 15m-Chart hat Startzeit 09:15 ET
+    is0915 = (h15 == 9 and m15 == 15)
+    // ta.valuewhen gibt den Close-Wert zurück, wenn is0915 zuletzt true war
+    ta.valuewhen(is0915, close, 0)
+
+// Abruf via request.security – funktioniert auf 1m, 5m und 15m-Charts
+// lookahead_off = kein Repainting, da wir auf bestätigte Kerzen warten
+fp_raw = request.security(
+     syminfo.tickerid,
+     "15",
+     f_get15mClose(),
+     lookahead = barmerge.lookahead_off
+ )
+
+// ============================================================
+// ── SESSION-ZUSTAND (VAR = persistente Variablen) ─────────
+// ============================================================
+
+var float  fair_price        = na   // Heutiger Fair Price
+var bool   fp_tagged         = false // Wurde FP heute schon berührt?
+var int    total_days        = 0    // Gesamtzahl gezählter Handelstage
+var int    return_days       = 0    // Anzahl Tage mit Rückkehr zum FP
+var string today_date        = ""   // Datums-String des aktuellen Tags
+var bool   session_started   = false // Session-Startmarker
+var bool   fp_set_today      = false // FP heute bereits gesetzt?
+var line   fp_line           = na   // Aktuelle FP-Linie
+var label  fp_label          = na   // Aktuelles FP-Label
+
+// ============================================================
+// ── TAGESLOGIK ────────────────────────────────────────────
+// ============================================================
+
+// Neuer Tag (ET-Zeitzone) → Zähler und Flags zurücksetzen
+currentDateStr = str.format("{0}", dayofmonth(time, "America/New_York")) + "." +
+                 str.format("{0}", month(time, "America/New_York"))      + "." +
+                 str.format("{0}", year(time, "America/New_York"))
+
+isNewDay = currentDateStr != today_date
+
+if isNewDay
+    today_date      := currentDateStr
+    fp_tagged       := false
+    session_started := false
+    fp_set_today    := false
+    // Hinweis: fair_price wird erst um 09:30 ET gesetzt (s.u.)
+
+// ============================================================
+// ── FAIR PRICE SETZEN (genau bei 09:30 ET) ────────────────
+// ============================================================
+
+h_et  = hour(time,   "America/New_York")
+m_et  = minute(time, "America/New_York")
+isSessionOpen = (h_et == 9  and m_et == 30)  // Erster Balken der NY-Session
+
+// Fair Price einmalig pro Tag beim Sessionstart setzen
+if isSessionOpen and not fp_set_today and not na(fp_raw) and fp_raw > 0
+    fair_price    := fp_raw
+    fp_set_today  := true
+    total_days    := total_days + 1
+
+    // Alte Linie/Label löschen, neue erstellen
+    if not na(fp_line)
+        line.delete(fp_line)
+    if not na(fp_label)
+        label.delete(fp_label)
+
+    fp_line := line.new(
+         x1    = bar_index,
+         y1    = fair_price,
+         x2    = bar_index + 1,
+         y2    = fair_price,
+         extend= extend.right,
+         style = line.style_dashed,
+         color = i_fpLineColor,
+         width = i_fpLineWidth
+     )
+
+    fp_label := label.new(
+         x      = bar_index,
+         y      = fair_price,
+         text   = "FP " + str.tostring(fair_price, "#.##"),
+         style  = label.style_label_left,
+         color  = color.new(color.orange, 70),
+         textcolor = color.white,
+         size   = size.small
+     )
+
+// FP-Linie bis zum aktuellen Balken verlängern (dynamisch)
+if not na(fp_line) and isNySession()
+    line.set_x2(fp_line, bar_index + 1)
+
+// ============================================================
+// ── SESSION BEENDET: LINIE AUSBLENDEN ─────────────────────
+// ============================================================
+// Nach 16:00 ET soll die Linie nicht mehr sichtbar sein
+
+isAfterClose = (h_et >= 16)
+
+if isAfterClose and not na(fp_line)
+    // Linie am Schlusskurs der Session einfrieren
+    // (nicht löschen, damit der Tag im Chart sichtbar bleibt bis Mitternacht)
+    // Optional: Linie komplett löschen → auskommentieren nach Wunsch
+    line.set_extend(fp_line, extend.none)
+
+// ============================================================
+// ── RÜCKKEHR ZUM FAIR PRICE ERKENNEN ─────────────────────
+// ============================================================
+
+// Preis berührt die FP-Zone (± i_zonePoints Punkte)
+returnTolerance = i_zonePoints
+priceTouchesFP  = not na(fair_price) and
+                  math.abs(close - fair_price) <= returnTolerance
+
+// Erster Berührungspunkt heute während der NY-Session
+isFirstReturn = isNySession() and priceTouchesFP and not fp_tagged and fp_set_today
+
+if isFirstReturn
+    fp_tagged    := true
+    return_days  := return_days + 1
+
+// ============================================================
+// ── PLOTS ─────────────────────────────────────────────────
+// ============================================================
+
+// Hintergrundfarbe: grün/rot je nach Preis vs. FP
+bgColor = na
+if i_showBg and isNySession() and fp_set_today and not na(fair_price)
+    bgColor := close > fair_price ? i_bgBullColor : i_bgBearColor
+
+bgcolor(bgColor)
+
+// FP-Zone (±5 Punkte) als Band darstellen
+zoneUpper = fp_set_today and isNySession() and not na(fair_price) ? fair_price + i_zonePoints : na
+zoneLower = fp_set_today and isNySession() and not na(fair_price) ? fair_price - i_zonePoints : na
+
+// Oberes und unteres Zonenband plotten (für fill)
+p_zoneUpper = plot(zoneUpper, title="Zone Oben",  color=na, display=display.none)
+p_zoneLower = plot(zoneLower, title="Zone Unten", color=na, display=display.none)
+
+// Zone füllen: grün wenn Preis > Zone, rot wenn Preis < Zone, neutral wenn drin
+zoneColor = na
+if fp_set_today and isNySession() and not na(fair_price)
+    zoneColor := close > fair_price + i_zonePoints ? i_zoneBullColor :
+                 close < fair_price - i_zonePoints ? i_zoneBearColor : i_zoneNullColor
+
+fill(p_zoneUpper, p_zoneLower, color=zoneColor, title="FP-Zone Fill")
+
+// Fair Price als Plot-Linie (zusätzlich zur line.new-Linie, für Legende)
+fpPlot = fp_set_today and isNySession() ? fair_price : na
+plot(fpPlot,
+     title     = "Fair Price",
+     color     = color.new(i_fpLineColor, 40),
+     linewidth = 1,
+     style     = plot.style_circles,
+     display   = display.none  // nur Legende, Linie kommt von line.new
+ )
+
+// ── RETURN-MARKER ─────────────────────────────────────────
+// Grüner Kreis beim ersten Berühren des Fair Price
+
+plotshape(
+     series   = isFirstReturn,
+     title    = "FP Return",
+     style    = shape.circle,
+     location = location.belowbar,
+     color    = i_returnColor,
+     size     = size.normal,
+     text     = "↑FP",
+     textcolor= color.lime
+ )
+
+// Zusätzlicher plotchar für bessere Sichtbarkeit
+plotchar(
+     series  = isFirstReturn,
+     title   = "FP Hit",
+     char    = "★",
+     location= location.belowbar,
+     color   = color.new(color.yellow, 0),
+     size    = size.small
+ )
+
+// ============================================================
+// ── STATISTIK-TABELLE ─────────────────────────────────────
+// ============================================================
+
+// Tabellen-Position bestimmen
+tablePos = switch i_tablePos
+    "top_right"    => position.top_right
+    "top_left"     => position.top_left
+    "bottom_right" => position.bottom_right
+    => position.bottom_left
+
+// Tabelle wird auf jedem letzten Balken neu erstellt (ermöglicht dynamische Position)
+if barstate.islast and i_showTable
+    var table statsTable = table.new(
+         position     = tablePos,
+         columns      = 2,
+         rows         = 5,
+         bgcolor      = color.new(color.black, 60),
+         border_color = color.new(color.gray, 50),
+         border_width = 1,
+         frame_color  = color.new(color.orange, 30),
+         frame_width  = 1
+     )
+    // Kopfzeile (zwei Zellen, da colspan nicht existiert)
+    table.cell(statsTable, 0, 0, "Fair Price 9:29 ET",
+         text_color = color.orange,
+         text_size  = size.small,
+         text_halign= text.align_center,
+         bgcolor    = color.new(color.black, 50))
+    table.cell(statsTable, 1, 0, "",
+         bgcolor    = color.new(color.black, 50))
+
+    // Heute FP
+    fpText = not na(fair_price) ? str.tostring(fair_price, "#.##") : "–"
+    table.cell(statsTable, 0, 1, "Heute FP:",
+         text_color = color.gray,  text_size = size.small)
+    table.cell(statsTable, 1, 1, fpText,
+         text_color = color.white, text_size = size.small,
+         text_halign= text.align_right)
+
+    // Gezählte Tage
+    table.cell(statsTable, 0, 2, "Tage gezählt:",
+         text_color = color.gray,  text_size = size.small)
+    table.cell(statsTable, 1, 2, str.tostring(total_days),
+         text_color = color.white, text_size = size.small,
+         text_halign= text.align_right)
+
+    // Rückkehr-Tage
+    table.cell(statsTable, 0, 3, "Returns:",
+         text_color = color.gray,  text_size = size.small)
+    table.cell(statsTable, 1, 3, str.tostring(return_days),
+         text_color = color.lime,  text_size = size.small,
+         text_halign= text.align_right)
+
+    // Return-Prozentsatz
+    float returnPct = total_days > 0 ? (return_days / total_days) * 100 : 0.0
+    returnPctStr = str.tostring(returnPct, "#.#") + " %"
+    returnPctCol = returnPct >= 70.0 ? color.lime :
+                   returnPct >= 50.0 ? color.yellow : color.red
+    table.cell(statsTable, 0, 4, "Return %:",
+         text_color = color.gray,  text_size = size.small)
+    table.cell(statsTable, 1, 4, returnPctStr,
+         text_color = returnPctCol, text_size = size.small,
+         text_halign= text.align_right)
+
+// ============================================================
+// ── DEBUG-LABEL (optional) ────────────────────────────────
+// ============================================================
+
+if i_showDebugLabel and barstate.islast
+    dbgText = "FP raw:  " + str.tostring(fp_raw, "#.##") + "\n" +
+              "FP heute: " + str.tostring(fair_price, "#.##") + "\n" +
+              "Tagged:  " + str.tostring(fp_tagged) + "\n" +
+              "Session: " + str.tostring(isNySession()) + "\n" +
+              "FP set:  " + str.tostring(fp_set_today)
+    label.new(
+         x         = bar_index,
+         y         = high,
+         text      = dbgText,
+         style     = label.style_label_left,
+         color     = color.new(color.blue, 60),
+         textcolor = color.white,
+         size      = size.small
+     )
+
+// ── ENDE ──────────────────────────────────────────────────
+// ============================================================
