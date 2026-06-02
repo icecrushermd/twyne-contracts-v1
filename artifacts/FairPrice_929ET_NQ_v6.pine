@@ -121,7 +121,7 @@ var label fp_label = na
 if isNyOpen and not s.fp_set and not na(fp_raw) and fp_raw > 0.0
     s.fp      := fp_raw
     s.fp_set  := true
-    s.total_days += 1
+    s.total_days := s.total_days + 1
 
     // Alte Linie & Label entfernen
     if not na(fp_line)
@@ -168,7 +168,7 @@ bool isReturn  = isNySession() and touchesFP and not s.tagged and s.fp_set
 
 if isReturn
     s.tagged      := true
-    s.return_days += 1
+    s.return_days := s.return_days + 1
 
 // ============================================================
 // ── PLOTS & VISUALS ───────────────────────────────────────
@@ -282,15 +282,17 @@ if barstate.islast and i_showTable
 // ── DEBUG-LABEL (optional, über Input aktivierbar) ────────
 // ============================================================
 if i_showDebug and barstate.islast
+    dbg = "fp_raw : " + str.tostring(fp_raw, "#.##")
+    dbg := dbg + "\ns.fp   : " + str.tostring(s.fp, "#.##")
+    dbg := dbg + "\ntagged : " + str.tostring(s.tagged)
+    dbg := dbg + "\nfp_set : " + str.tostring(s.fp_set)
+    dbg := dbg + "\nsession: " + str.tostring(isNySession())
+    dbg := dbg + "\ndays   : " + str.tostring(s.total_days)
+    dbg := dbg + "\nreturns: " + str.tostring(s.return_days)
     label.new(
-         x = bar_index, y = high,
-         text      = "fp_raw : " + str.tostring(fp_raw,  "#.##") + "\n" +
-                     "s.fp   : " + str.tostring(s.fp,    "#.##") + "\n" +
-                     "tagged : " + str.tostring(s.tagged)         + "\n" +
-                     "fp_set : " + str.tostring(s.fp_set)         + "\n" +
-                     "session: " + str.tostring(isNySession())     + "\n" +
-                     "days   : " + str.tostring(s.total_days)      + "\n" +
-                     "returns: " + str.tostring(s.return_days),
+         x         = bar_index,
+         y         = high,
+         text      = dbg,
          style     = label.style_label_left,
          color     = color.new(color.navy, 50),
          textcolor = color.white,
