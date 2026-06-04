@@ -183,6 +183,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('trades')">Trades</div>
     <div class="tab" onclick="switchTab('mm')">Money Management</div>
+    <div class="tab" onclick="switchTab('scalein')">Scale-In Planer</div>
     <div class="tab" onclick="switchTab('rules')">Regeln</div>
     <div class="tab" onclick="switchTab('payout')">Auszahlung</div>
   </div>
@@ -326,6 +327,87 @@
     <div class="card">
       <h2>Consistency – Tagesgewinn-Verteilung</h2>
       <div id="consistencyChart" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- TAB: SCALE-IN -->
+  <div class="tab-content" id="tab-scalein">
+    <div class="grid2" style="margin-bottom:16px;">
+
+      <div class="card">
+        <h2>Scale-In Planer – MNQ</h2>
+        <div style="background:rgba(79,142,247,0.1);border:1px solid rgba(79,142,247,0.3);border-radius:8px;padding:10px;font-size:12px;margin-bottom:14px;color:var(--blue);">
+          Nachlegen nur wenn die vorherige Position <strong>risikofrei</strong> läuft (Stop auf Break-Even oder besser).
+        </div>
+        <div class="form-row">
+          <div>
+            <label>Richtung</label>
+            <select id="si_dir" onchange="calcScaleIn()">
+              <option value="long">Long</option>
+              <option value="short">Short</option>
+            </select>
+          </div>
+          <div>
+            <label>Einstiegspreis (Punkte)</label>
+            <input type="number" id="si_entry" value="21000" step="0.25" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Stop-Loss (Punkte vom Entry)</label>
+            <input type="number" id="si_stop" value="8" min="1" step="0.25" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Profit-Ziel (Punkte vom Entry)</label>
+            <input type="number" id="si_target" value="24" min="1" step="0.25" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Start-Kontrakte (Stufe 1)</label>
+            <input type="number" id="si_start_c" value="5" min="1" max="50" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Kontrakte je Aufstockung</label>
+            <input type="number" id="si_add_c" value="5" min="1" max="20" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Max. Kontrakte gesamt</label>
+            <input type="number" id="si_max_c" value="15" min="1" max="50" oninput="calcScaleIn()">
+          </div>
+          <div>
+            <label>Nachlegen wenn Gewinn ≥ (Punkte)</label>
+            <input type="number" id="si_trigger" value="8" min="1" step="0.25" title="Gewinn auf die vorherige Tranche muss diesen Betrag erreichen bevor nachgelegt wird" oninput="calcScaleIn()">
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">= 1R (Empfehlung: gleich wie Stop)</div>
+          </div>
+        </div>
+        <button class="btn btn-green" style="margin-top:14px;width:100%;" onclick="calcScaleIn()">Plan berechnen</button>
+      </div>
+
+      <div class="card">
+        <h2>Gesamtübersicht</h2>
+        <div id="si_summary" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Stufen-Plan – wann & wie nachlegen</h2>
+      <div style="overflow-x:auto;margin-top:10px;">
+        <table id="si_table">
+          <thead>
+            <tr>
+              <th>Stufe</th>
+              <th>Preis</th>
+              <th>Aktion</th>
+              <th>Neue Kontr.</th>
+              <th>Gesamt Kontr.</th>
+              <th>Neuer Stop</th>
+              <th>Risiko dieser Stufe</th>
+              <th>Gesamt-Risiko</th>
+              <th>Ø Entry</th>
+              <th>Gewinn bei Ziel</th>
+            </tr>
+          </thead>
+          <tbody id="si_tbody"></tbody>
+        </table>
+      </div>
+      <div id="si_chart" style="margin-top:16px;"></div>
     </div>
   </div>
 
@@ -1334,11 +1416,231 @@ function exportCSV() {
 }
 
 // ============================================================
+// SCALE-IN PLANER
+// ============================================================
+function calcScaleIn() {
+  const dir      = document.getElementById('si_dir').value;
+  const entry    = parseFloat(document.getElementById('si_entry').value)    || 21000;
+  const stopPts  = parseFloat(document.getElementById('si_stop').value)     || 8;
+  const targetPts= parseFloat(document.getElementById('si_target').value)   || 24;
+  const startC   = parseInt(document.getElementById('si_start_c').value)    || 5;
+  const addC     = parseInt(document.getElementById('si_add_c').value)      || 5;
+  const maxC     = parseInt(document.getElementById('si_max_c').value)      || 15;
+  const trigPts  = parseFloat(document.getElementById('si_trigger').value)  || stopPts;
+
+  const TICK_VAL = 0.50;
+  const TICKS_PT = 4;
+  const ptVal    = TICK_VAL * TICKS_PT; // $2 per point per contract
+
+  const sign = dir === 'long' ? 1 : -1;
+  const stopPrice   = entry - sign * stopPts;
+  const targetPrice = entry + sign * targetPts;
+
+  // Build stages
+  const stages = [];
+  let totalContracts = 0;
+  let totalCost      = 0; // sum(price × contracts) for avg entry
+  let currentStop    = stopPrice;
+  let stageEntry     = entry;
+
+  // Stage 1 – initial entry
+  const s1C    = Math.min(startC, maxC);
+  const s1Risk = s1C * stopPts * ptVal;
+  totalContracts = s1C;
+  totalCost      = s1C * entry;
+
+  stages.push({
+    num: 1,
+    price: entry,
+    action: 'Einstieg',
+    newC: s1C,
+    totalC: totalContracts,
+    stopPrice: stopPrice,
+    stageRisk: s1Risk,
+    totalRisk: s1Risk,
+    avgEntry: entry,
+    profitAtTarget: s1C * targetPts * ptVal,
+    note: `Stop: ${stopPrice.toFixed(2)} (${stopPts} Pkt)`,
+    color: 'var(--blue)',
+  });
+
+  // Subsequent stages
+  let stageNum = 2;
+  let prevBatchPrice = entry;
+  let prevBatchC     = s1C;
+
+  while (totalContracts < maxC) {
+    // Next add price: when previous batch has gained trigPts (move stop of prev batch to its entry → risk-free)
+    const addPrice = prevBatchPrice + sign * trigPts;
+
+    // Check we haven't passed the target
+    if (sign * (addPrice - targetPrice) >= 0) break;
+
+    const newC = Math.min(addC, maxC - totalContracts);
+    if (newC <= 0) break;
+
+    // New stop = entry of previous batch (break-even on prev) or better
+    const newStop = prevBatchPrice; // BE stop on previous tranche
+    const newStopPts = Math.abs(addPrice - newStop);
+    const stageRisk  = newC * newStopPts * ptVal;
+
+    // But rule: stageRisk must be ≤ $250
+    const cappedC  = stageRisk > MAX_POS_LOSS
+      ? Math.floor(MAX_POS_LOSS / (newStopPts * ptVal))
+      : newC;
+    const actualRisk = cappedC * newStopPts * ptVal;
+
+    totalContracts += cappedC;
+    totalCost      += cappedC * addPrice;
+    const avgEntry  = totalCost / totalContracts;
+    const ptsToTarget = Math.abs(targetPrice - addPrice);
+    const profitAtTarget = totalContracts * ptsToTarget * ptVal
+      + (stages.reduce((s,st) => s + st.newC * Math.abs(targetPrice - st.price) * ptVal, 0)
+         - stages.reduce((s,st) => s + st.newC * Math.abs(addPrice - st.price) * ptVal, 0));
+
+    // Gross profit at target from this point
+    const grossAtTarget = totalContracts * Math.abs(targetPrice - addPrice) * ptVal;
+
+    // Total remaining risk (only new batch has risk; previous are risk-free)
+    const totalRisk = actualRisk;
+
+    stages.push({
+      num: stageNum,
+      price: addPrice,
+      action: 'Nachlegen',
+      newC: cappedC,
+      totalC: totalContracts,
+      stopPrice: newStop,
+      stageRisk: actualRisk,
+      totalRisk: actualRisk,
+      avgEntry,
+      profitAtTarget: grossAtTarget,
+      note: `Prev. Stop → ${newStop.toFixed(2)} (BE). Neuer Stop: ${newStop.toFixed(2)}`,
+      color: cappedC < newC ? 'var(--yellow)' : 'var(--green)',
+      capped: cappedC < newC,
+    });
+
+    prevBatchPrice = addPrice;
+    prevBatchC     = cappedC;
+    stageNum++;
+  }
+
+  // Final target row
+  const lastTotalC = stages[stages.length-1].totalC;
+  const fullProfit = stages.reduce((sum, st) => sum + st.newC * Math.abs(targetPrice - st.price) * ptVal, 0);
+  stages.push({
+    num: '🎯',
+    price: targetPrice,
+    action: 'Ziel erreicht',
+    newC: 0,
+    totalC: lastTotalC,
+    stopPrice: '–',
+    stageRisk: 0,
+    totalRisk: 0,
+    avgEntry: totalCost / lastTotalC,
+    profitAtTarget: fullProfit,
+    note: `${dir === 'long' ? '+' : '-'}${targetPts} Punkte vom Einstieg`,
+    color: 'var(--green)',
+  });
+
+  renderScaleInTable(stages, dir, entry, stopPrice, targetPrice, ptVal);
+  renderScaleInSummary(stages, entry, stopPts, targetPts, dir, ptVal, fullProfit);
+  renderScaleInChart(stages, entry, stopPrice, targetPrice, dir);
+}
+
+function renderScaleInTable(stages, dir, entry, stopPrice, targetPrice, ptVal) {
+  const tbody = document.getElementById('si_tbody');
+  tbody.innerHTML = stages.map(s => {
+    const isTarget = s.action === 'Ziel erreicht';
+    const isCapped = s.capped;
+    return `<tr style="background:${isTarget ? 'rgba(0,200,150,0.06)' : 'transparent'}">
+      <td style="font-weight:700;color:${s.color}">${s.num}</td>
+      <td style="font-weight:600">${typeof s.price === 'number' ? s.price.toFixed(2) : s.price}</td>
+      <td style="color:${s.color}">${s.action}${isCapped ? ' <span style="font-size:10px;color:var(--yellow)">(reduziert wg. $250 Limit)</span>' : ''}</td>
+      <td style="font-weight:700;color:var(--blue)">${s.newC > 0 ? '+' + s.newC : '–'}</td>
+      <td style="font-weight:700">${s.totalC}</td>
+      <td style="color:var(--muted)">${typeof s.stopPrice === 'number' ? s.stopPrice.toFixed(2) : s.stopPrice}</td>
+      <td style="color:${s.stageRisk > 200 ? 'var(--yellow)' : s.stageRisk > 0 ? 'var(--green)' : 'var(--muted)'}">${s.stageRisk > 0 ? '-$' + s.stageRisk.toFixed(0) : '–'}</td>
+      <td style="color:${s.totalRisk > MAX_POS_LOSS ? 'var(--red)' : 'var(--green)'}">${s.totalRisk > 0 ? '-$' + s.totalRisk.toFixed(0) : '–'}</td>
+      <td style="color:var(--muted)">${s.avgEntry.toFixed(2)}</td>
+      <td style="font-weight:700;color:var(--green)">+$${s.profitAtTarget.toFixed(0)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderScaleInSummary(stages, entry, stopPts, targetPts, dir, ptVal, fullProfit) {
+  const el = document.getElementById('si_summary');
+  const last = stages[stages.length - 2]; // last add stage (before target)
+  const maxC = last ? last.totalC : stages[0].totalC;
+  const initialRisk = stages[0].stageRisk;
+  const rr = (fullProfit / initialRisk).toFixed(1);
+  const addCount = stages.filter(s => s.action === 'Nachlegen').length;
+
+  el.innerHTML = `
+    <div class="rule-row"><span>Richtung</span><span class="rule-val" style="color:${dir==='long'?'var(--green)':'var(--red)'}">${dir.toUpperCase()}</span></div>
+    <div class="rule-row"><span>Einstieg</span><span class="rule-val">${entry.toFixed(2)}</span></div>
+    <div class="rule-row"><span>Stop-Loss</span><span class="rule-val red">${(dir==='long' ? entry - stopPts : entry + stopPts).toFixed(2)} (${stopPts} Pkt)</span></div>
+    <div class="rule-row"><span>Ziel</span><span class="rule-val green">${(dir==='long' ? entry + targetPts : entry - targetPts).toFixed(2)} (${targetPts} Pkt)</span></div>
+    <div class="rule-row"><span>Anfangsrisiko (Stufe 1)</span><span class="rule-val red">-$${initialRisk.toFixed(0)}</span></div>
+    <div class="rule-row"><span>Aufstockungen</span><span class="rule-val blue">${addCount}×</span></div>
+    <div class="rule-row"><span>Max. Kontrakte</span><span class="rule-val">${maxC}</span></div>
+    <div class="rule-row"><span>Gewinn bei Ziel (gesamt)</span><span class="rule-val green">+$${fullProfit.toFixed(0)}</span></div>
+    <div class="rule-row"><span>Risk/Reward (auf Anfangsrisiko)</span><span class="rule-val green">1 : ${rr}</span></div>
+    <div style="margin-top:12px;padding:10px;background:var(--card2);border-radius:8px;font-size:12px;line-height:1.7;">
+      <strong>Ablauf:</strong><br>
+      ${stages.filter(s=>s.num!=='🎯').map(s =>
+        s.action === 'Einstieg'
+          ? `• Einstieg mit ${s.newC} Kontr. @ ${s.price.toFixed(2)}, Stop @ ${s.stopPrice.toFixed(2)}`
+          : `• Preis @ ${s.price.toFixed(2)} → Stop der vorigen Tranche auf BE setzen → ${s.newC} Kontr. nachlegen, neuer Stop @ ${s.stopPrice.toFixed(2)}`
+      ).join('<br>')}
+      <br>• Ziel @ ${(dir==='long' ? entry + targetPts : entry - targetPts).toFixed(2)} → Alles schließen → <strong class="green">+$${fullProfit.toFixed(0)}</strong>
+    </div>
+  `;
+}
+
+function renderScaleInChart(stages, entry, stopPrice, targetPrice, dir) {
+  const el = document.getElementById('si_chart');
+  const allPrices = [stopPrice, ...stages.map(s => s.price), targetPrice].filter(p => typeof p === 'number');
+  const minP = Math.min(...allPrices);
+  const maxP = Math.max(...allPrices);
+  const range = maxP - minP || 1;
+
+  const toX = p => ((p - minP) / range * 88 + 4).toFixed(1) + '%';
+
+  const lines = [
+    { price: stopPrice, label: 'Stop', color: 'var(--red)', dash: true },
+    ...stages.filter(s => s.num !== '🎯').map(s => ({
+      price: s.price, label: s.action === 'Einstieg' ? 'Entry' : `+${s.newC}`, color: s.action === 'Einstieg' ? 'var(--blue)' : 'var(--green)', dash: false
+    })),
+    { price: targetPrice, label: 'Ziel', color: 'var(--green)', dash: true },
+  ];
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:10px;">Preis-Map</h2>
+    <div style="position:relative;height:90px;background:var(--card2);border-radius:10px;overflow:hidden;">
+      ${dir === 'long'
+        ? `<div style="position:absolute;left:${toX(stopPrice)};right:${(100 - parseFloat(toX(targetPrice))).toFixed(1)}%;top:0;bottom:0;background:rgba(0,200,150,0.07);"></div>`
+        : `<div style="position:absolute;right:${toX(stopPrice)};left:${toX(targetPrice)};top:0;bottom:0;background:rgba(0,200,150,0.07);"></div>`}
+      ${lines.map(l => `
+        <div style="position:absolute;left:${toX(l.price)};top:0;bottom:0;width:2px;background:${l.color};opacity:0.8;${l.dash?'border-left:2px dashed '+l.color+';background:none;':''}"></div>
+        <div style="position:absolute;left:${toX(l.price)};top:8px;transform:translateX(-50%);font-size:10px;color:${l.color};font-weight:700;text-align:center;white-space:nowrap;">${l.label}<br>${typeof l.price==='number'?l.price.toFixed(1):''}</div>
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;flex-wrap:wrap;">
+      <span style="color:var(--red)">── Stop</span>
+      <span style="color:var(--blue)">── Entry</span>
+      <span style="color:var(--green)">── Nachlegen / Ziel</span>
+    </div>
+  `;
+}
+
+// ============================================================
 // INIT
 // ============================================================
 document.getElementById('tradeDate').value = today();
 renderDashboard();
 renderMNQRefTable();
+calcScaleIn();
 setInterval(renderDashboard, 60000);
 </script>
 </body>
