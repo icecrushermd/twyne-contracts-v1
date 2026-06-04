@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Funded Trader Dashboard – 50K</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d2e;
+    --card2: #222538;
+    --green: #00c896;
+    --red: #ff4d6d;
+    --yellow: #f5a623;
+    --blue: #4f8ef7;
+    --text: #e8eaf6;
+    --muted: #8892a4;
+    --border: #2d3148;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 20px; font-weight: 700; color: var(--green); }
+  header span { color: var(--muted); font-size: 13px; }
+  .badge { background: var(--green); color: #000; border-radius: 6px; padding: 2px 10px; font-size: 12px; font-weight: 700; margin-left: auto; }
+
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .card h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .card .big { font-size: 28px; font-weight: 700; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .yellow { color: var(--yellow); }
+  .blue { color: var(--blue); }
+
+  .progress-wrap { margin-top: 10px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .progress-bar { height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+
+  .rule-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .rule-row:last-child { border-bottom: none; }
+  .rule-val { font-weight: 600; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot-green { background: var(--green); }
+  .dot-red { background: var(--red); }
+  .dot-yellow { background: var(--yellow); }
+
+  .alert-box { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+  .alert-ok { background: rgba(0,200,150,0.1); border: 1px solid rgba(0,200,150,0.3); }
+  .alert-warn { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.3); }
+  .alert-danger { background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3); }
+  .alert-box .icon { font-size: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .btn { border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-green { background: var(--green); color: #000; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-ghost { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  input, select { background: var(--card2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; width: 100%; }
+  input:focus, select:focus { border-color: var(--green); }
+  label { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: block; }
+  .form-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; align-items: end; }
+
+  .mm-box { background: var(--card2); border-radius: 10px; padding: 14px; margin-top: 10px; }
+  .mm-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
+  .mm-row strong { color: var(--green); }
+
+  .consistency-bar { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .day-bar-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .day-bar-row .day-label { width: 70px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .day-bar-row .bar-outer { flex: 1; height: 18px; background: var(--card2); border-radius: 4px; overflow: hidden; position: relative; }
+  .day-bar-row .bar-inner { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 6px; font-size: 11px; font-weight: 600; color: #000; transition: width 0.4s; }
+  .day-bar-row .pct-label { width: 42px; text-align: right; }
+  .limit-line { position: absolute; left: 30%; top: 0; bottom: 0; width: 2px; background: rgba(255,77,109,0.6); z-index: 1; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--card); border: 1px solid var(--border); transition: all 0.2s; }
+  .tab.active { background: var(--green); color: #000; border-color: var(--green); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .payout-calc { background: var(--card2); border-radius: 10px; padding: 16px; }
+  .payout-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .payout-row:last-child { border-bottom: none; font-weight: 700; font-size: 15px; }
+
+  @media (max-width: 900px) {
+    .grid3, .grid4 { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid3, .grid4, .grid2 { grid-template-columns: 1fr; }
+    main { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Funded Trader Dashboard</h1>
+    <span id="lastUpdate">Zuletzt aktualisiert: –</span>
+  </div>
+  <div class="badge" id="statusBadge">AKTIV</div>
+</header>
+
+<main>
+
+  <!-- Alert Zone -->
+  <div id="alertZone"></div>
+
+  <!-- KPI Row -->
+  <div class="grid4">
+    <div class="card">
+      <h2>Kontostand</h2>
+      <div class="big green" id="kpiBalance">$50,000</div>
+      <div class="sub" id="kpiBalanceSub">Startkonto: $50,000</div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>DD-Puffer</span><span id="ddPct">100%</span></div>
+        <div class="progress-bar"><div class="progress-fill green" id="ddBar" style="width:100%;background:var(--green)"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Tagesgewinn / -verlust</h2>
+      <div class="big" id="kpiToday">$0</div>
+      <div class="sub" id="kpiTodaySub">Tageslimit (DD): –$250</div>
+    </div>
+    <div class="card">
+      <h2>Gesamtgewinn</h2>
+      <div class="big green" id="kpiTotalPnl">$0</div>
+      <div class="sub" id="kpiTotalPnlSub">Ziel: $3,000</div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>Fortschritt</span><span id="profitPct">0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="profitBar" style="width:0%;background:var(--blue)"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Consistency Rule</h2>
+      <div class="big" id="kpiConsistency">–</div>
+      <div class="sub">Max. 30% des Gesamtgewinns pro Tag</div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>Bester Tag / Gesamt</span><span id="consPct">–</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="consBar" style="width:0%;background:var(--green)"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('trades')">Trades</div>
+    <div class="tab" onclick="switchTab('mm')">Money Management</div>
+    <div class="tab" onclick="switchTab('rules')">Regeln</div>
+    <div class="tab" onclick="switchTab('payout')">Auszahlung</div>
+  </div>
+
+  <!-- TAB: TRADES -->
+  <div class="tab-content active" id="tab-trades">
+    <div class="grid2">
+      <div class="card">
+        <h2>Trade hinzufügen</h2>
+        <div class="form-row" style="margin-top:10px;">
+          <div>
+            <label>Datum</label>
+            <input type="date" id="tradeDate">
+          </div>
+          <div>
+            <label>Instrument</label>
+            <input type="text" id="tradeSymbol" placeholder="MNQ" value="MNQ">
+          </div>
+          <div>
+            <label>Richtung</label>
+            <select id="tradeDir">
+              <option value="Long">Long</option>
+              <option value="Short">Short</option>
+            </select>
+          </div>
+          <div>
+            <label>Kontrakte (5–50)</label>
+            <input type="number" id="tradeContracts" min="5" max="50" value="5" placeholder="5-50">
+          </div>
+          <div>
+            <label>PnL ($)</label>
+            <input type="number" id="tradePnl" placeholder="+250 / -150" step="0.01">
+          </div>
+          <div>
+            <label>Kommentar</label>
+            <input type="text" id="tradeNote" placeholder="optional">
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-green" onclick="addTrade()">+ Trade eintragen</button>
+          <button class="btn btn-ghost" onclick="clearForm()">Leeren</button>
+        </div>
+        <div id="tradeWarning" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Tagesübersicht</h2>
+        <div id="dailySummary" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Trade-Journal</h2>
+      <div style="overflow-x:auto;margin-top:8px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Symbol</th>
+              <th>Dir</th>
+              <th>Kontr.</th>
+              <th>PnL</th>
+              <th>Kum. Balance</th>
+              <th>Kommentar</th>
+              <th>Aktion</th>
+            </tr>
+          </thead>
+          <tbody id="tradeTable"></tbody>
+        </table>
+        <div id="emptyState" style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">Noch keine Trades eingetragen. Starte deinen ersten Trade oben.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: MONEY MANAGEMENT -->
+  <div class="tab-content" id="tab-mm">
+    <div class="grid3">
+      <div class="card">
+        <h2>MNQ Position Sizing Rechner</h2>
+        <div style="background:rgba(79,142,247,0.1);border:1px solid rgba(79,142,247,0.3);border-radius:8px;padding:10px;font-size:12px;margin-bottom:12px;color:var(--blue);">
+          <strong>MNQ Specs:</strong> Tick $0.50 | 1 Punkt = $2.00 | Max Loss Rule: $250/Trade | Min 5 / Max 50 Kontrakte
+        </div>
+        <div style="margin-top:10px;">
+          <label>Risiko pro Trade ($ – max $250 laut Regel)</label>
+          <input type="number" id="mmRisk" value="200" min="1" max="250" oninput="calcMM()">
+          <label style="margin-top:10px;">Tick-Wert MNQ ($) – Standard: $0.50</label>
+          <input type="number" id="mmTickVal" value="0.50" min="0.01" step="0.01" oninput="calcMM()">
+          <label style="margin-top:10px;">Stop-Loss (Ticks) – 1 Punkt = 4 Ticks</label>
+          <input type="number" id="mmStopTicks" value="40" min="1" oninput="calcMM()">
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">40 Ticks = 10 Punkte Stop</div>
+        </div>
+        <div class="mm-box" id="mmResult" style="margin-top:12px;">
+          <div class="mm-row"><span>Max. Verlust pro Trade</span><strong id="mmMaxLoss">–</strong></div>
+          <div class="mm-row"><span>Empfohlene Kontrakte</span><strong id="mmContracts">–</strong></div>
+          <div class="mm-row"><span>Risiko in % des Kontos</span><strong id="mmRiskPct">–</strong></div>
+          <div class="mm-row"><span>Tages-Budget (5 Trades)</span><strong id="mmDayBudget">–</strong></div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <h2 style="margin-bottom:8px;">MNQ Schnell-Referenz (Max $250 Verlust)</h2>
+          <table style="font-size:12px;">
+            <thead><tr><th>Stop (Punkte)</th><th>Stop (Ticks)</th><th>Max Kontr.</th><th>Verlust/Kontr.</th><th>Empfehlung</th></tr></thead>
+            <tbody id="mnqRefTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Consistency-Tagesbudget</h2>
+        <div style="margin-top:10px;">
+          <label>Aktueller Gesamtgewinn ($)</label>
+          <input type="number" id="consTotal" value="0" oninput="calcConsistency()">
+          <label style="margin-top:10px;">Bisheriger Tagesgewinn ($)</label>
+          <input type="number" id="consToday" value="0" oninput="calcConsistency()">
+          <label style="margin-top:10px;">Anzahl Handelstage mit Gewinn</label>
+          <input type="number" id="consDays" value="1" min="1" oninput="calcConsistency()">
+        </div>
+        <div class="mm-box" id="consResult">
+          <div class="mm-row"><span>30%-Limit heute</span><strong id="consLimit">–</strong></div>
+          <div class="mm-row"><span>Noch handelbar heute</span><strong id="consRemain">–</strong></div>
+          <div class="mm-row"><span>Empf. Tagesgewinn-Ziel</span><strong id="consRecommend">–</strong></div>
+          <div class="mm-row"><span>Auf-Ziel-Status</span><strong id="consStatus">–</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Risiko-Ampel</h2>
+        <div id="riskAmpel" style="margin-top:10px;"></div>
+        <div style="margin-top:14px;">
+          <h2 style="margin-bottom:8px;">Empfohlene Strategie</h2>
+          <div id="strategyText" style="font-size:13px;line-height:1.6;color:var(--text);"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Consistency – Tagesgewinn-Verteilung</h2>
+      <div id="consistencyChart" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- TAB: REGELN -->
+  <div class="tab-content" id="tab-rules">
+    <div class="grid3">
+      <div class="card">
+        <h2>Funded Account Regeln</h2>
+        <div class="rule-row"><span>Drawdown Mode</span><span class="rule-val">EOD Balance</span></div>
+        <div class="rule-row"><span>Maximum Drawdown</span><span class="rule-val red">$3,000</span></div>
+        <div class="rule-row"><span>Min. erlaubter EOD-Stand</span><span class="rule-val red">$47,000</span></div>
+        <div class="rule-row"><span>Position Loss (flat)</span><span class="rule-val yellow">0.5% = $250</span></div>
+        <div class="rule-row"><span>Profit Share</span><span class="rule-val green">bis 100%</span></div>
+        <div class="rule-row"><span>Consistency Rule</span><span class="rule-val yellow">max. 30%/Tag</span></div>
+        <div class="rule-row"><span>Kontrakte</span><span class="rule-val">5 min / 50 max</span></div>
+        <div class="rule-row"><span>Reset Price</span><span class="rule-val">€430 (max 2x)</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Kosten & Gebühren</h2>
+        <div class="rule-row"><span>One-Time Fee</span><span class="rule-val">€23</span></div>
+        <div class="rule-row"><span>Funded One-Time Fee</span><span class="rule-val">€111</span></div>
+        <div class="rule-row"><span>Monthly Fee</span><span class="rule-val">€34 / Monat</span></div>
+        <div class="rule-row"><span>Extend Price</span><span class="rule-val">€34</span></div>
+        <div class="rule-row"><span>Max. Accounts</span><span class="rule-val green">10</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Wichtige Regeln erklärt</h2>
+        <div style="font-size:13px;line-height:1.7;color:var(--text);">
+          <p style="margin-bottom:10px;"><span class="status-dot dot-red"></span><strong>EOD Drawdown:</strong> Dein Kontostand am <em>Tagesende</em> darf nie unter $47,000 fallen. Intraday-Schwankungen sind erlaubt, aber achte auf Close-Balance.</p>
+          <p style="margin-bottom:10px;"><span class="status-dot dot-yellow"></span><strong>Position Loss 0.5%:</strong> Pro einzelnem Trade maximal $250 Verlust. Stop-Loss immer setzen!</p>
+          <p style="margin-bottom:10px;"><span class="status-dot dot-yellow"></span><strong>Consistency 30%:</strong> Dein bester Handelstag darf nicht mehr als 30% deines gesamten Gewinns ausmachen. Gleichmäßig traden!</p>
+          <p><span class="status-dot dot-green"></span><strong>Profit Share bis 100%:</strong> Je nach Plattform-Stufe. Regelmäßig Auszahlungen beantragen!</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h2>MNQ Money Management – Kontrakt-Guide ($50K | Max $250 Verlust/Trade)</h2>
+      <div style="overflow-x:auto;margin-top:10px;">
+        <table style="font-size:13px;">
+          <thead>
+            <tr>
+              <th>Stop-Loss</th>
+              <th>Ticks</th>
+              <th>Max. Kontrakte</th>
+              <th>Verlust/Kontrakt</th>
+              <th>Gesamtrisiko</th>
+              <th>Gewinn bei 1:2 RR</th>
+              <th>Stil</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>3 Punkte</td><td>12</td><td style="color:var(--red);font-weight:700">41</td><td>$6</td><td>$246</td><td class="green">+$492</td><td style="color:var(--muted)">Aggressiv Scalp</td></tr>
+            <tr><td>5 Punkte</td><td>20</td><td style="color:var(--yellow);font-weight:700">25</td><td>$10</td><td>$250</td><td class="green">+$500</td><td style="color:var(--muted)">Scalping</td></tr>
+            <tr style="background:rgba(0,200,150,0.05)"><td><strong>8 Punkte ★</strong></td><td>32</td><td style="color:var(--green);font-weight:700">15</td><td>$16</td><td>$240</td><td class="green">+$480</td><td style="color:var(--green)"><strong>Empfohlen</strong></td></tr>
+            <tr><td>10 Punkte</td><td>40</td><td style="color:var(--green);font-weight:700">12</td><td>$20</td><td>$240</td><td class="green">+$480</td><td style="color:var(--muted)">Konservativ</td></tr>
+            <tr><td>15 Punkte</td><td>60</td><td style="color:var(--green);font-weight:700">8</td><td>$30</td><td>$240</td><td class="green">+$480</td><td style="color:var(--muted)">Swing</td></tr>
+            <tr><td>20 Punkte</td><td>80</td><td style="color:var(--green);font-weight:700">6</td><td>$40</td><td>$240</td><td class="green">+$480</td><td style="color:var(--muted)">Sicherer Swing</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;padding:12px;background:var(--card2);border-radius:8px;font-size:13px;line-height:1.7;">
+        <p><span class="status-dot dot-green"></span><strong>Empfehlung: 8-Punkte-Stop mit 15 MNQ-Kontrakten</strong> – Gutes Risiko/Reward, realistische Stops, Consistency-Rule einfach einzuhalten.</p>
+        <p style="margin-top:6px;color:var(--muted);">Kontrakte immer auf eine Zahl begrenzen, mit der du bei 2 aufeinanderfolgenden Verlusttrades nicht aus dem Drawdown-Limit fällst: Max 2 × $250 = $500 / Tag ist sicher.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0;">
+      <h2>Consistency Rule – Detailerklärung mit Beispiel</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:10px;font-size:13px;line-height:1.7;">
+        <div>
+          <p><strong>Was bedeutet 30% Consistency?</strong></p>
+          <p style="color:var(--muted);margin-top:6px;">Wenn du insgesamt $3.000 Gewinn gemacht hast, darf dein bester einzelner Tag NICHT mehr als $900 (30% × $3.000) eingebracht haben.</p>
+          <br>
+          <p><strong>Schlechtes Beispiel (VERLETZT die Regel):</strong></p>
+          <ul style="margin-left:16px;color:var(--red);margin-top:4px;">
+            <li>Tag 1: +$2.000</li>
+            <li>Tag 2: +$500</li>
+            <li>Tag 3: +$500</li>
+            <li>Gesamt: $3.000 → Tag 1 = 66.7% → VERLETZT!</li>
+          </ul>
+        </div>
+        <div>
+          <p><strong>Gutes Beispiel (Rule eingehalten):</strong></p>
+          <ul style="margin-left:16px;color:var(--green);margin-top:22px;">
+            <li>Tag 1: +$750</li>
+            <li>Tag 2: +$800</li>
+            <li>Tag 3: +$700</li>
+            <li>Tag 4: +$750</li>
+            <li>Gesamt: $3.000 → Tag 2 = 26.7% → OK!</li>
+          </ul>
+          <br>
+          <p style="color:var(--muted);">Strategie: Täglich zwischen $600–$800 anstreben bei $3K Ziel. Niemals einen "Mega-Tag" durch erhöhte Kontrakte erzwingen!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: AUSZAHLUNG -->
+  <div class="tab-content" id="tab-payout">
+    <div class="grid2">
+      <div class="card">
+        <h2>Auszahlungs-Rechner</h2>
+        <div style="margin-top:10px;">
+          <label>Gesamtgewinn vor Auszahlung ($)</label>
+          <input type="number" id="payProfit" value="3000" oninput="calcPayout()">
+          <label style="margin-top:10px;">Profit Share (%)</label>
+          <input type="number" id="payShare" value="100" min="0" max="100" oninput="calcPayout()">
+          <label style="margin-top:10px;">Monatliche Plattform-Gebühr (€)</label>
+          <input type="number" id="payFee" value="34" oninput="calcPayout()">
+        </div>
+        <div class="payout-calc" style="margin-top:14px;" id="payoutResult">
+          <div class="payout-row"><span>Bruttogewinn</span><span id="payGross">–</span></div>
+          <div class="payout-row"><span>Profit Share Anteil</span><span id="payYours" class="green">–</span></div>
+          <div class="payout-row"><span>Monatliche Gebühr</span><span id="payFeeAmt" class="red">–</span></div>
+          <div class="payout-row"><span style="color:var(--green)">Nettoauszahlung</span><span id="payNet" class="green">–</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Skalierungs-Plan (10 Accounts)</h2>
+        <div style="font-size:13px;line-height:1.7;margin-top:8px;">
+          <p style="color:var(--muted);margin-bottom:10px;">Bei max. 10 Accounts und gleichem Ansatz:</p>
+        </div>
+        <div id="scaleTable" style="overflow-x:auto;"></div>
+        <div style="margin-top:12px;padding:12px;background:var(--card2);border-radius:8px;font-size:13px;">
+          <span class="status-dot dot-green"></span>
+          <strong>Empfehlung:</strong> Beginne mit 1-2 Accounts, skaliere erst nach 3 erfolgreichen Monaten. Consistency-Rule gilt pro Account separat!
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Auszahlungs-Checkliste</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px;font-size:13px;line-height:1.8;">
+        <div>
+          <p><span class="status-dot" id="chk1dot" style="background:var(--muted)"></span> Kontostand über $47,000 (EOD)</p>
+          <p><span class="status-dot" id="chk2dot" style="background:var(--muted)"></span> Kein einzelner Tag > 30% des Gesamtgewinns</p>
+          <p><span class="status-dot" id="chk3dot" style="background:var(--muted)"></span> Position Loss nie über $250 pro Trade</p>
+          <p><span class="status-dot" id="chk4dot" style="background:var(--muted)"></span> Kontrakte innerhalb 5–50</p>
+        </div>
+        <div>
+          <p><span class="status-dot" id="chk5dot" style="background:var(--muted)"></span> Mindestens 5 Handelstage aktiv</p>
+          <p><span class="status-dot" id="chk6dot" style="background:var(--muted)"></span> Positiver Nettogewinn vorhanden</p>
+          <p><span class="status-dot" id="chk7dot" style="background:var(--muted)"></span> Drawdown-Regel nicht verletzt</p>
+          <p><span class="status-dot dot-yellow"></span> Plattform-Gebühren aktuell bezahlt</p>
+        </div>
+      </div>
+      <button class="btn btn-green" style="margin-top:14px;" onclick="runChecklist()">Checkliste aktualisieren</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const ACCOUNT_SIZE = 50000;
+const MAX_DRAWDOWN = 3000;
+const MIN_BALANCE  = ACCOUNT_SIZE - MAX_DRAWDOWN; // 47000
+const POS_LOSS_PCT = 0.005; // 0.5%
+const MAX_POS_LOSS = ACCOUNT_SIZE * POS_LOSS_PCT; // 250
+const CONSISTENCY  = 0.30;
+const MIN_CONTRACTS = 5;
+const MAX_CONTRACTS = 50;
+
+let trades = JSON.parse(localStorage.getItem('funded_trades') || '[]');
+
+// ============================================================
+// UTILS
+// ============================================================
+function fmt(n, prefix='$') {
+  const abs = Math.abs(n).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return (n < 0 ? '-' : '') + prefix + abs;
+}
+function fmtShort(n) {
+  return (n >= 0 ? '+' : '') + fmt(n);
+}
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+function save() {
+  localStorage.setItem('funded_trades', JSON.stringify(trades));
+}
+
+// ============================================================
+// COMPUTED STATS
+// ============================================================
+function computeStats() {
+  let balance = ACCOUNT_SIZE;
+  let totalPnl = 0;
+  const dailyPnl = {};
+  const sorted = [...trades].sort((a,b) => a.date.localeCompare(b.date));
+
+  sorted.forEach(t => {
+    balance += t.pnl;
+    totalPnl += t.pnl;
+    dailyPnl[t.date] = (dailyPnl[t.date] || 0) + t.pnl;
+  });
+
+  const profitDays = Object.entries(dailyPnl).filter(([,v]) => v > 0);
+  const bestDay = profitDays.length ? Math.max(...profitDays.map(([,v]) => v)) : 0;
+  const todayPnl = dailyPnl[today()] || 0;
+  const consistencyPct = totalPnl > 0 ? bestDay / totalPnl : 0;
+
+  return { balance, totalPnl, dailyPnl, bestDay, todayPnl, consistencyPct, sorted };
+}
+
+// ============================================================
+// RENDER DASHBOARD
+// ============================================================
+function renderDashboard() {
+  const { balance, totalPnl, dailyPnl, bestDay, todayPnl, consistencyPct } = computeStats();
+
+  // Update time
+  document.getElementById('lastUpdate').textContent = 'Zuletzt: ' + new Date().toLocaleTimeString('de-DE');
+
+  // Balance
+  const balEl = document.getElementById('kpiBalance');
+  balEl.textContent = fmt(balance);
+  balEl.className = 'big ' + (balance >= MIN_BALANCE ? 'green' : 'red');
+  document.getElementById('kpiBalanceSub').textContent = `Min. erlaubt: ${fmt(MIN_BALANCE)} | DD-Rest: ${fmt(balance - MIN_BALANCE)}`;
+
+  // DD progress bar
+  const ddPuffer = balance - MIN_BALANCE;
+  const ddPct = Math.max(0, Math.min(100, (ddPuffer / MAX_DRAWDOWN) * 100));
+  document.getElementById('ddPct').textContent = ddPct.toFixed(0) + '%';
+  const ddBar = document.getElementById('ddBar');
+  ddBar.style.width = ddPct + '%';
+  ddBar.style.background = ddPct > 50 ? 'var(--green)' : ddPct > 20 ? 'var(--yellow)' : 'var(--red)';
+
+  // Today
+  const todEl = document.getElementById('kpiToday');
+  todEl.textContent = fmtShort(todayPnl);
+  todEl.className = 'big ' + (todayPnl >= 0 ? 'green' : 'red');
+
+  // Total PnL
+  const pnlEl = document.getElementById('kpiTotalPnl');
+  pnlEl.textContent = fmtShort(totalPnl);
+  pnlEl.className = 'big ' + (totalPnl >= 0 ? 'green' : 'red');
+  const profitPct = Math.max(0, Math.min(100, (totalPnl / 3000) * 100));
+  document.getElementById('profitPct').textContent = profitPct.toFixed(0) + '%';
+  document.getElementById('profitBar').style.width = profitPct + '%';
+
+  // Consistency
+  const consEl = document.getElementById('kpiConsistency');
+  if (totalPnl > 0) {
+    const pct = (consistencyPct * 100).toFixed(1);
+    consEl.textContent = pct + '%';
+    consEl.className = 'big ' + (consistencyPct <= CONSISTENCY ? 'green' : 'red');
+    document.getElementById('consPct').textContent = fmt(bestDay) + ' / ' + fmt(totalPnl);
+    const consBarW = Math.min(100, consistencyPct / CONSISTENCY * 100);
+    const consBar = document.getElementById('consBar');
+    consBar.style.width = consBarW + '%';
+    consBar.style.background = consistencyPct <= CONSISTENCY ? 'var(--green)' : 'var(--red)';
+  } else {
+    consEl.textContent = 'N/A';
+    consEl.className = 'big muted';
+  }
+
+  // Status badge
+  const badge = document.getElementById('statusBadge');
+  if (balance < MIN_BALANCE) {
+    badge.textContent = 'VERLETZT';
+    badge.style.background = 'var(--red)';
+    badge.style.color = '#fff';
+  } else if (consistencyPct > CONSISTENCY && totalPnl > 0) {
+    badge.textContent = 'WARNUNG';
+    badge.style.background = 'var(--yellow)';
+    badge.style.color = '#000';
+  } else {
+    badge.textContent = 'AKTIV';
+    badge.style.background = 'var(--green)';
+    badge.style.color = '#000';
+  }
+
+  renderAlerts(balance, totalPnl, consistencyPct, todayPnl);
+  renderTradeTable();
+  renderDailySummary(dailyPnl);
+  renderConsistencyChart(dailyPnl, totalPnl);
+  renderStrategy(balance, totalPnl, consistencyPct, todayPnl);
+  renderRiskAmpel(balance, consistencyPct, todayPnl);
+  calcMM();
+  calcPayout();
+  calcConsistency();
+  buildScaleTable();
+  runChecklist();
+}
+
+// ============================================================
+// ALERTS
+// ============================================================
+function renderAlerts(balance, totalPnl, consistencyPct, todayPnl) {
+  const zone = document.getElementById('alertZone');
+  const alerts = [];
+
+  if (balance < MIN_BALANCE) {
+    alerts.push({ type: 'danger', icon: '🚨', msg: `REGEL VERLETZT: Kontostand ${fmt(balance)} liegt unter dem erlaubten Minimum von ${fmt(MIN_BALANCE)}! Kein Trading bis zur Klärung.` });
+  } else if (balance < MIN_BALANCE + 500) {
+    alerts.push({ type: 'warn', icon: '⚠️', msg: `KRITISCH: Nur noch ${fmt(balance - MIN_BALANCE)} DD-Puffer übrig. Heute kein weiterer Verlust tolerierbar!` });
+  }
+
+  if (totalPnl > 0 && consistencyPct > CONSISTENCY) {
+    alerts.push({ type: 'danger', icon: '⚠️', msg: `CONSISTENCY VERLETZT: Bester Tag = ${(consistencyPct*100).toFixed(1)}% des Gesamtgewinns (Limit: 30%). Auszahlung derzeit nicht möglich!` });
+  } else if (totalPnl > 0 && consistencyPct > 0.25) {
+    alerts.push({ type: 'warn', icon: '⚠️', msg: `Consistency-Warnung: ${(consistencyPct*100).toFixed(1)}% (Limit 30%). Vorsicht mit weiteren großen Gewinntagen!` });
+  }
+
+  if (todayPnl <= -MAX_POS_LOSS) {
+    alerts.push({ type: 'warn', icon: '🛑', msg: `Tages-Verlust ${fmtShort(todayPnl)} nähert sich dem Tageslimit. Position Loss Regel: Max. $250 pro Trade!` });
+  }
+
+  if (alerts.length === 0 && totalPnl > 0) {
+    alerts.push({ type: 'ok', icon: '✅', msg: `Alle Regeln eingehalten. Weiter so! Consistency: ${(consistencyPct*100).toFixed(1)}% (Limit: 30%)` });
+  }
+
+  zone.innerHTML = alerts.map(a => `
+    <div class="alert-box alert-${a.type}">
+      <span class="icon">${a.icon}</span>
+      <span>${a.msg}</span>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// TRADE TABLE
+// ============================================================
+function renderTradeTable() {
+  const tbody = document.getElementById('tradeTable');
+  const empty = document.getElementById('emptyState');
+  const sorted = [...trades].sort((a,b) => b.date.localeCompare(a.date));
+
+  if (sorted.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  let cum = ACCOUNT_SIZE;
+  const cumMap = {};
+  [...trades].sort((a,b) => a.date.localeCompare(b.date)).forEach(t => {
+    cum += t.pnl;
+    cumMap[t.id] = cum;
+  });
+
+  tbody.innerHTML = sorted.map(t => {
+    const pnlClass = t.pnl >= 0 ? 'green' : 'red';
+    const warn = Math.abs(t.pnl) > MAX_POS_LOSS ? ' title="WARNUNG: Position Loss > $250!"' : '';
+    return `
+      <tr${warn}>
+        <td>${t.date}</td>
+        <td><strong>${t.symbol || '–'}</strong></td>
+        <td><span style="color:${t.dir==='Long'?'var(--green)':'var(--red)'}">${t.dir}</span></td>
+        <td>${t.contracts}</td>
+        <td class="${pnlClass}" style="font-weight:600;">${fmtShort(t.pnl)}</td>
+        <td style="color:${cumMap[t.id]>=MIN_BALANCE?'var(--text)':'var(--red)'}">${fmt(cumMap[t.id])}</td>
+        <td style="color:var(--muted)">${t.note||''}</td>
+        <td><button class="btn btn-red btn-sm" onclick="deleteTrade('${t.id}')">✕</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ============================================================
+// DAILY SUMMARY
+// ============================================================
+function renderDailySummary(dailyPnl) {
+  const el = document.getElementById('dailySummary');
+  const days = Object.entries(dailyPnl).sort((a,b) => b[0].localeCompare(a[0])).slice(0,7);
+  if (!days.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Noch keine Daten.</div>'; return; }
+
+  el.innerHTML = days.map(([date, pnl]) => `
+    <div class="rule-row">
+      <span>${date}</span>
+      <span class="${pnl>=0?'green':'red'}" style="font-weight:600;">${fmtShort(pnl)}</span>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// CONSISTENCY CHART
+// ============================================================
+function renderConsistencyChart(dailyPnl, totalPnl) {
+  const el = document.getElementById('consistencyChart');
+  const profitDays = Object.entries(dailyPnl).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+
+  if (!profitDays.length || totalPnl <= 0) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Noch keine Gewinntage.</div>';
+    return;
+  }
+
+  const limitPct = 30; // 30% of total
+  const maxVal = Math.max(...profitDays.map(([,v]) => v));
+
+  el.innerHTML = `
+    <div class="consistency-bar">
+      ${profitDays.map(([date, val]) => {
+        const pctOfTotal = totalPnl > 0 ? (val / totalPnl * 100) : 0;
+        const barWidth = (val / maxVal * 100);
+        const over = pctOfTotal > limitPct;
+        return `
+          <div class="day-bar-row">
+            <div class="day-label">${date}</div>
+            <div class="bar-outer">
+              <div class="limit-line"></div>
+              <div class="bar-inner" style="width:${barWidth}%;background:${over?'var(--red)':'var(--green)'}">
+                ${val > 50 ? fmt(val) : ''}
+              </div>
+            </div>
+            <div class="pct-label ${over?'red':'green'}">${pctOfTotal.toFixed(1)}%</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px;">Rote Linie = 30%-Grenze des Gesamtgewinns. Balken dürfen diese Linie nicht überschreiten.</div>
+  `;
+}
+
+// ============================================================
+// RISK AMPEL
+// ============================================================
+function renderRiskAmpel(balance, consistencyPct, todayPnl) {
+  const el = document.getElementById('riskAmpel');
+  const ddPuffer = balance - MIN_BALANCE;
+  const checks = [
+    { label: 'Drawdown-Puffer', ok: ddPuffer > 500, warn: ddPuffer > 0, val: fmt(ddPuffer) },
+    { label: 'Consistency', ok: consistencyPct <= 0.25, warn: consistencyPct <= CONSISTENCY, val: (consistencyPct*100).toFixed(1)+'%' },
+    { label: 'Heute P&L', ok: todayPnl >= 0, warn: todayPnl > -MAX_POS_LOSS, val: fmtShort(todayPnl) },
+    { label: 'Min. Balance', ok: balance >= MIN_BALANCE + 1000, warn: balance >= MIN_BALANCE, val: fmt(balance) },
+  ];
+
+  el.innerHTML = checks.map(c => {
+    const dot = c.ok ? 'dot-green' : (c.warn ? 'dot-yellow' : 'dot-red');
+    const color = c.ok ? 'var(--green)' : (c.warn ? 'var(--yellow)' : 'var(--red)');
+    return `
+      <div class="rule-row">
+        <span><span class="status-dot ${dot}"></span>${c.label}</span>
+        <span style="font-weight:600;color:${color}">${c.val}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ============================================================
+// STRATEGY TEXT
+// ============================================================
+function renderStrategy(balance, totalPnl, consistencyPct, todayPnl) {
+  const el = document.getElementById('strategyText');
+  const ddPuffer = balance - MIN_BALANCE;
+  const lines = [];
+
+  const profitTarget = 3000;
+  const remaining = profitTarget - totalPnl;
+  const maxDailyToStayConsistent = totalPnl > 0 ? totalPnl * CONSISTENCY : profitTarget * CONSISTENCY;
+
+  if (balance < MIN_BALANCE) {
+    lines.push('<span class="red">STOPP: Drawdown-Regel verletzt. Kein Trading!</span>');
+  } else {
+    if (remaining > 0) lines.push(`Verbleibend bis Auszahlungsziel ($3.000): <strong>${fmt(remaining)}</strong>`);
+    else lines.push(`Ziel erreicht! Gewinn: <strong class="green">${fmt(totalPnl)}</strong> – Auszahlung beantragen!`);
+
+    lines.push(`Empfohlenes Tagesgewinn-Ziel: <strong class="green">${fmt(Math.min(remaining, profitTarget / 5))}</strong> (gleichmäßig über 5 Tage)`);
+
+    if (totalPnl > 0) {
+      lines.push(`Max. heute noch handelbar (Consistency): <strong>${fmt(maxDailyToStayConsistent - (todayPnl > 0 ? todayPnl : 0))}</strong>`);
+    }
+
+    lines.push(`DD-Puffer heute: <strong style="color:${ddPuffer>1000?'var(--green)':'var(--yellow)'}">${fmt(ddPuffer)}</strong> – Max. Verlust EOD: $${ddPuffer.toFixed(0)}`);
+    // MNQ-spezifische Empfehlung
+    const mnqStop8pt = 8 * 4 * MNQ_TICK_VAL; // 8 Punkte Stop = $16/Kontr.
+    const recContracts = Math.min(MAX_CONTRACTS, Math.floor(MAX_POS_LOSS / mnqStop8pt));
+    lines.push(`MNQ Empfehlung (8-Punkte-Stop): <strong class="green">${recContracts} Kontrakte</strong> = max. $${(recContracts * mnqStop8pt).toFixed(0)} Risiko/Trade`);
+  }
+
+  el.innerHTML = lines.map(l => `<p style="margin-bottom:6px;">• ${l}</p>`).join('');
+}
+
+// ============================================================
+// MM CALCULATOR (MNQ-optimiert)
+// ============================================================
+const MNQ_TICK_VAL = 0.50;
+const MNQ_TICKS_PER_PT = 4;
+
+function calcMM() {
+  const { balance } = computeStats();
+  const risk = Math.min(parseFloat(document.getElementById('mmRisk').value) || 200, MAX_POS_LOSS);
+  const tickVal = parseFloat(document.getElementById('mmTickVal').value) || MNQ_TICK_VAL;
+  const stopTicks = parseFloat(document.getElementById('mmStopTicks').value) || 40;
+
+  const lossPerContract = tickVal * stopTicks;
+  let contracts = lossPerContract > 0 ? Math.floor(risk / lossPerContract) : 1;
+  contracts = Math.max(MIN_CONTRACTS, Math.min(MAX_CONTRACTS, contracts));
+  const actualRisk = contracts * lossPerContract;
+  const riskPct = (actualRisk / balance * 100).toFixed(2);
+
+  document.getElementById('mmMaxLoss').textContent = fmt(Math.min(risk, MAX_POS_LOSS));
+  const cEl = document.getElementById('mmContracts');
+  cEl.textContent = contracts + ' Kontrakte';
+  cEl.style.color = contracts <= 20 ? 'var(--green)' : contracts <= 35 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('mmRiskPct').textContent = riskPct + '%';
+  document.getElementById('mmDayBudget').textContent = fmt(Math.min(risk, MAX_POS_LOSS) * 5);
+  renderMNQRefTable();
+}
+
+function renderMNQRefTable() {
+  const stops = [
+    { pt: 3,  label: '3 Punkte (Scalp eng)', rec: 'Aggressiv' },
+    { pt: 5,  label: '5 Punkte (Scalp)',     rec: 'Scalping' },
+    { pt: 8,  label: '8 Punkte (Standard)',  rec: 'Empfohlen' },
+    { pt: 10, label: '10 Punkte',            rec: 'Konservativ' },
+    { pt: 15, label: '15 Punkte (Swing)',    rec: 'Swing' },
+    { pt: 20, label: '20 Punkte (Swing+)',   rec: 'Sicher' },
+  ];
+  const tbody = document.getElementById('mnqRefTable');
+  if (!tbody) return;
+  tbody.innerHTML = stops.map(s => {
+    const ticks = s.pt * MNQ_TICKS_PER_PT;
+    const lossPerC = MNQ_TICK_VAL * ticks;
+    let maxC = Math.floor(MAX_POS_LOSS / lossPerC);
+    maxC = Math.min(maxC, MAX_CONTRACTS);
+    const color = maxC <= 15 ? 'var(--green)' : maxC <= 30 ? 'var(--yellow)' : 'var(--red)';
+    return `<tr>
+      <td>${s.label}</td>
+      <td>${ticks}</td>
+      <td style="font-weight:700;color:${color}">${maxC}</td>
+      <td style="color:var(--muted)">$${lossPerC.toFixed(2)}</td>
+      <td style="font-size:11px;color:var(--muted)">${s.rec}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// CONSISTENCY CALCULATOR
+// ============================================================
+function calcConsistency() {
+  const total = parseFloat(document.getElementById('consTotal').value) || 0;
+  const todayVal = parseFloat(document.getElementById('consToday').value) || 0;
+  const days = parseInt(document.getElementById('consDays').value) || 1;
+
+  const limit = total > 0 ? total * CONSISTENCY : 900;
+  const remain = Math.max(0, limit - todayVal);
+  const recommend = total > 0 ? (total / days).toFixed(2) : 600;
+  const pct = total > 0 ? (todayVal / total * 100).toFixed(1) : 0;
+
+  document.getElementById('consLimit').textContent = fmt(limit);
+  document.getElementById('consRemain').textContent = fmt(remain);
+  document.getElementById('consRecommend').textContent = '$' + recommend + ' / Tag';
+  const statusEl = document.getElementById('consStatus');
+  if (total <= 0) { statusEl.textContent = '–'; statusEl.className = ''; }
+  else if (todayVal / total > CONSISTENCY) { statusEl.textContent = 'VERLETZT (' + pct + '%)'; statusEl.className = 'red'; }
+  else if (todayVal / total > 0.25) { statusEl.textContent = 'WARNUNG (' + pct + '%)'; statusEl.className = 'yellow'; }
+  else { statusEl.textContent = 'OK (' + pct + '%)'; statusEl.className = 'green'; }
+}
+
+// ============================================================
+// PAYOUT CALCULATOR
+// ============================================================
+function calcPayout() {
+  const profit = parseFloat(document.getElementById('payProfit').value) || 0;
+  const share = parseFloat(document.getElementById('payShare').value) || 100;
+  const fee = parseFloat(document.getElementById('payFee').value) || 34;
+
+  const yours = profit * share / 100;
+  const net = yours - fee;
+
+  document.getElementById('payGross').textContent = fmt(profit);
+  document.getElementById('payYours').textContent = fmt(yours);
+  document.getElementById('payFeeAmt').textContent = '-€' + fee.toFixed(2);
+  document.getElementById('payNet').textContent = fmt(net);
+}
+
+// ============================================================
+// SCALE TABLE
+// ============================================================
+function buildScaleTable() {
+  const profit = parseFloat(document.getElementById('payProfit').value) || 3000;
+  const share = parseFloat(document.getElementById('payShare').value) || 100;
+  const fee = parseFloat(document.getElementById('payFee').value) || 34;
+
+  const rows = [1,2,3,5,10].map(n => {
+    const gross = profit * n;
+    const yours = gross * share / 100;
+    const fees = fee * n;
+    const net = yours - fees;
+    return `<tr><td>${n}</td><td>${fmt(gross)}</td><td>${fmt(yours)}</td><td>€${fees}</td><td class="green">${fmt(net)}</td></tr>`;
+  });
+
+  document.getElementById('scaleTable').innerHTML = `
+    <table>
+      <thead><tr><th>Accounts</th><th>Bruttogewinn</th><th>Dein Anteil</th><th>Gebühren</th><th>Netto</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+  `;
+}
+
+// ============================================================
+// CHECKLIST
+// ============================================================
+function runChecklist() {
+  const { balance, totalPnl, consistencyPct, trades: _t } = { ...computeStats(), trades };
+
+  const dot = (id, ok) => {
+    document.getElementById(id).className = 'status-dot ' + (ok ? 'dot-green' : 'dot-red');
+  };
+
+  dot('chk1dot', balance >= MIN_BALANCE);
+  dot('chk2dot', totalPnl <= 0 || consistencyPct <= CONSISTENCY);
+  dot('chk3dot', trades.every(t => Math.abs(t.pnl) <= MAX_POS_LOSS));
+  dot('chk4dot', trades.every(t => t.contracts >= MIN_CONTRACTS && t.contracts <= MAX_CONTRACTS));
+  dot('chk5dot', new Set(trades.map(t => t.date)).size >= 5);
+  dot('chk6dot', totalPnl > 0);
+  dot('chk7dot', balance >= MIN_BALANCE);
+}
+
+// ============================================================
+// ADD / DELETE TRADE
+// ============================================================
+function addTrade() {
+  const date = document.getElementById('tradeDate').value || today();
+  const symbol = document.getElementById('tradeSymbol').value.trim().toUpperCase() || 'UNKNOWN';
+  const dir = document.getElementById('tradeDir').value;
+  const contracts = parseInt(document.getElementById('tradeContracts').value) || 1;
+  const pnl = parseFloat(document.getElementById('tradePnl').value);
+  const note = document.getElementById('tradeNote').value.trim();
+
+  const warn = document.getElementById('tradeWarning');
+
+  if (isNaN(pnl)) { warn.innerHTML = '<div class="alert-box alert-warn"><span>Bitte PnL eingeben.</span></div>'; return; }
+
+  const warnings = [];
+  if (Math.abs(pnl) > MAX_POS_LOSS) warnings.push(`PnL $${Math.abs(pnl).toFixed(2)} überschreitet Position Loss Limit von $${MAX_POS_LOSS}!`);
+  if (contracts < MIN_CONTRACTS || contracts > MAX_CONTRACTS) warnings.push(`Kontrakte ${contracts} außerhalb erlaubtem Bereich (5–50)!`);
+
+  const trade = { id: Date.now().toString(), date, symbol, dir, contracts, pnl, note };
+  trades.push(trade);
+  save();
+  renderDashboard();
+  clearForm();
+
+  if (warnings.length) {
+    warn.innerHTML = warnings.map(w => `<div class="alert-box alert-warn"><span>⚠️ ${w}</span></div>`).join('');
+  } else {
+    warn.innerHTML = '<div class="alert-box alert-ok"><span>✅ Trade eingetragen.</span></div>';
+    setTimeout(() => warn.innerHTML = '', 2000);
+  }
+}
+
+function deleteTrade(id) {
+  trades = trades.filter(t => t.id !== id);
+  save();
+  renderDashboard();
+}
+
+function clearForm() {
+  document.getElementById('tradeDate').value = today();
+  document.getElementById('tradeSymbol').value = 'MNQ';
+  document.getElementById('tradeContracts').value = '5';
+  document.getElementById('tradePnl').value = '';
+  document.getElementById('tradeNote').value = '';
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'mm') renderConsistencyChart(computeStats().dailyPnl, computeStats().totalPnl);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.getElementById('tradeDate').value = today();
+renderDashboard();
+renderMNQRefTable();
+setInterval(renderDashboard, 60000);
+</script>
+</body>
+</html>
