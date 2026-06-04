@@ -171,6 +171,11 @@
         <div class="progress-label"><span>Bester Tag / Gesamt</span><span id="consPct">–</span></div>
         <div class="progress-bar"><div class="progress-fill" id="consBar" style="width:0%;background:var(--green)"></div></div>
       </div>
+      <div id="consRemainingBox" style="margin-top:10px;padding:10px;border-radius:8px;background:var(--card2);display:none;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">HEUTE NOCH HANDELBAR</div>
+        <div id="consRemainingAmt" style="font-size:22px;font-weight:700;"></div>
+        <div id="consRemainingNote" style="font-size:11px;color:var(--muted);margin-top:2px;"></div>
+      </div>
     </div>
   </div>
 
@@ -591,6 +596,10 @@ function renderDashboard() {
 
   // Consistency
   const consEl = document.getElementById('kpiConsistency');
+  const remainBox  = document.getElementById('consRemainingBox');
+  const remainAmt  = document.getElementById('consRemainingAmt');
+  const remainNote = document.getElementById('consRemainingNote');
+
   if (totalPnl > 0) {
     const pct = (consistencyPct * 100).toFixed(1);
     consEl.textContent = pct + '%';
@@ -600,9 +609,60 @@ function renderDashboard() {
     const consBar = document.getElementById('consBar');
     consBar.style.width = consBarW + '%';
     consBar.style.background = consistencyPct <= CONSISTENCY ? 'var(--green)' : 'var(--red)';
+
+    // --- Noch heute handelbar ---
+    // otherPnl = Gewinn aller Tage OHNE heute
+    const otherPnl = totalPnl - (todayPnl > 0 ? todayPnl : 0);
+    const bestOtherDay = Object.entries(dailyPnl)
+      .filter(([d, v]) => d !== today() && v > 0)
+      .reduce((m, [,v]) => Math.max(m, v), 0);
+
+    // Wenn heute der beste Tag werden könnte:
+    // todayMax ≤ (3/7) × otherPnl  [damit today = 30% von total]
+    const maxTodayIfBest = otherPnl > 0 ? (3 / 7) * otherPnl : 0;
+
+    // Falls ein anderer Tag bereits der beste ist:
+    // Wir dürfen heute soviel verdienen, dass bestOtherDay ≤ 30% × newTotal
+    // → newTotal ≥ bestOtherDay / 0.30
+    // → wir brauchen noch: bestOtherDay/0.30 - totalPnl mehr gesamt
+    const neededForCompliance = bestOtherDay > 0
+      ? Math.max(0, bestOtherDay / CONSISTENCY - totalPnl)
+      : 0;
+
+    let maxToday, noteText;
+    if (todayPnl > 0 && todayPnl >= bestOtherDay) {
+      // Heute ist aktuell bester Tag oder gleichauf → Formel (3/7) × andere
+      maxToday = maxTodayIfBest;
+      const remaining = maxToday - todayPnl;
+      if (remaining <= 0) {
+        remainAmt.textContent = '$0 – STOP';
+        remainAmt.style.color = 'var(--red)';
+        noteText = `Heute schon ${fmt(todayPnl)} = ${pct}% des Gesamtgewinns. Nicht mehr traden!`;
+      } else {
+        remainAmt.textContent = '+' + fmt(remaining);
+        remainAmt.style.color = remaining > 100 ? 'var(--green)' : 'var(--yellow)';
+        noteText = `Heute max. ${fmt(maxToday)} erlaubt (30% von ${fmt(totalPnl + remaining)})`;
+      }
+    } else if (bestOtherDay > 0 && neededForCompliance > 0) {
+      // Anderer Tag ist bester → wir müssen Gesamtgewinn noch hochziehen
+      remainAmt.textContent = '+' + fmt(neededForCompliance) + ' nötig';
+      remainAmt.style.color = 'var(--yellow)';
+      noteText = `Bester Tag (${fmt(bestOtherDay)}) = ${(bestOtherDay/totalPnl*100).toFixed(1)}% – Gesamtgewinn muss auf ${fmt(bestOtherDay/CONSISTENCY)} wachsen`;
+      noteText += ` | Heute noch: ${fmt(Math.min(maxTodayIfBest, neededForCompliance))}`;
+    } else {
+      // Alles ok, zeige sicheres Tageslimit
+      const safeTodayMax = otherPnl > 0 ? maxTodayIfBest : 900;
+      const safeRemain = Math.max(0, safeTodayMax - (todayPnl > 0 ? todayPnl : 0));
+      remainAmt.textContent = '+' + fmt(safeRemain);
+      remainAmt.style.color = 'var(--green)';
+      noteText = `Tageslimit: ${fmt(safeTodayMax)} (30% von erwartetem Gesamtgewinn)`;
+    }
+    remainNote.textContent = noteText;
+    remainBox.style.display = 'block';
   } else {
     consEl.textContent = 'N/A';
     consEl.className = 'big muted';
+    remainBox.style.display = 'none';
   }
 
   // Status badge
@@ -717,12 +777,48 @@ function renderDailySummary(dailyPnl) {
   const days = Object.entries(dailyPnl).sort((a,b) => b[0].localeCompare(a[0])).slice(0,7);
   if (!days.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Noch keine Daten.</div>'; return; }
 
-  el.innerHTML = days.map(([date, pnl]) => `
-    <div class="rule-row">
-      <span>${date}</span>
-      <span class="${pnl>=0?'green':'red'}" style="font-weight:600;">${fmtShort(pnl)}</span>
-    </div>
-  `).join('');
+  const totalPnl = Object.values(dailyPnl).reduce((s,v) => s+v, 0);
+  const todayPnl = dailyPnl[today()] || 0;
+  const otherPnl = totalPnl - (todayPnl > 0 ? todayPnl : 0);
+  const bestOther = Object.entries(dailyPnl)
+    .filter(([d,v]) => d !== today() && v > 0)
+    .reduce((m,[,v]) => Math.max(m,v), 0);
+
+  // Max heute handelbar
+  const maxTodayIfBest = otherPnl > 0 ? (3/7) * otherPnl : 0;
+  const safeMax = todayPnl > 0 && todayPnl >= bestOther ? maxTodayIfBest
+                : otherPnl > 0 ? maxTodayIfBest : 900;
+  const remaining = Math.max(0, safeMax - (todayPnl > 0 ? todayPnl : 0));
+  const pctToday = totalPnl > 0 && todayPnl > 0 ? (todayPnl / totalPnl * 100).toFixed(1) : null;
+
+  const todayRows = days.map(([date, pnl]) => {
+    const isToday = date === today();
+    const pctStr = totalPnl > 0 && pnl > 0 ? ` <span style="font-size:11px;color:var(--muted)">(${(pnl/totalPnl*100).toFixed(1)}%)</span>` : '';
+    return `<div class="rule-row" style="${isToday?'background:rgba(79,142,247,0.06);border-radius:6px;padding:8px 6px;':''}">
+      <span>${isToday ? '<strong>Heute</strong>' : date}</span>
+      <span class="${pnl>=0?'green':'red'}" style="font-weight:600;">${fmtShort(pnl)}${pctStr}</span>
+    </div>`;
+  }).join('');
+
+  // Consistency remaining banner
+  let banner = '';
+  if (totalPnl > 0) {
+    if (remaining <= 0 && todayPnl > 0) {
+      banner = `<div style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;">
+        <div style="font-weight:700;color:var(--red)">🛑 Heute STOP – Consistency erreicht</div>
+        <div style="color:var(--muted);font-size:12px;margin-top:2px;">Heute ${fmt(todayPnl)} = ${pctToday}% des Gesamtgewinns (Limit: 30%)</div>
+      </div>`;
+    } else {
+      const color = remaining > 200 ? 'var(--green)' : remaining > 50 ? 'var(--yellow)' : 'var(--red)';
+      banner = `<div style="background:rgba(0,200,150,0.08);border:1px solid rgba(0,200,150,0.25);border-radius:8px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px;">HEUTE NOCH HANDELBAR (Consistency)</div>
+        <div style="font-size:24px;font-weight:700;color:${color}">+${fmt(remaining)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tageslimit: ${fmt(safeMax)} | Bisher heute: ${fmtShort(todayPnl)}</div>
+      </div>`;
+    }
+  }
+
+  el.innerHTML = banner + todayRows;
 }
 
 // ============================================================
