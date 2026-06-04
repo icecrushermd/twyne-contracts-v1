@@ -1026,11 +1026,18 @@ let csvHeaders = [];
 
 // Known column name mappings per field
 const CSV_ALIASES = {
-  date:      ['date','datum','time','datetime','entry time','exit time','entry date','trade date','executiontime','time stamp','timestamp'],
-  symbol:    ['instrument','symbol','market','product','ticker','contract','name','asset'],
-  dir:       ['action','direction','side','b/s','buy/sell','type','entry action','trade type','buysell','initaction'],
-  contracts: ['qty','quantity','contracts','size','volume','shares','amount','menge','anzahl','entry quantity','exec qty'],
-  pnl:       ['profit','p&l','pnl','net profit','gain/loss','realized p&l','realized pnl','profit/loss','net p&l','commission adjusted pnl','profit and loss','daily p&l','tradepnl','net','result'],
+  date:      ['date','datum','time','datetime','entry time','exit time','entry date','exit date',
+              'trade date','executiontime','time stamp','timestamp','entry date/time','exit date/time',
+              'open time','close time','open date','close date','date/time'],
+  symbol:    ['instrument','symbol','market','product','ticker','contract','name','asset',
+              'micro nasdaq','futures'],
+  dir:       ['action','direction','side','b/s','buy/sell','type','entry action','trade type',
+              'buysell','initaction','buy / sell','long/short'],
+  contracts: ['qty','quantity','contracts','size','volume','shares','amount','menge','anzahl',
+              'entry quantity','exec qty','lots','position size'],
+  pnl:       ['profit','p&l','pnl','net profit','gain/loss','realized p&l','realized pnl',
+              'profit/loss','net p&l','commission adjusted pnl','profit and loss','daily p&l',
+              'tradepnl','net pnl','net','result','closed p&l','trade p&l','net pl','realized pl'],
 };
 
 function detectDelimiter(line) {
@@ -1153,6 +1160,19 @@ function getCell(row, colName) {
   return idx >= 0 ? (row[idx] || '').trim() : '';
 }
 
+function normalizeSymbol(raw) {
+  if (!raw) return 'MNQ';
+  const u = raw.toUpperCase().trim();
+  if (u.includes('MICRO') && u.includes('NASDAQ')) return 'MNQ';
+  if (u.includes('MICRO') && u.includes('S&P'))    return 'MES';
+  if (u.includes('MICRO') && u.includes('DOW'))     return 'MYM';
+  if (u.includes('MICRO') && u.includes('RUSSELL')) return 'M2K';
+  if (u === 'NASDAQ' || u === 'NQ100' || u.startsWith('NQ')) return 'NQ';
+  if (u.startsWith('ES'))  return 'ES';
+  if (u.startsWith('CL'))  return 'CL';
+  return u.length > 6 ? u.slice(0,6) : u;
+}
+
 function importCSVConfirm() {
   const mapping = {};
   ['date','symbol','dir','contracts','pnl'].forEach(f => {
@@ -1167,15 +1187,25 @@ function importCSVConfirm() {
     const pnl = parseFloat(rawPnl);
     if (isNaN(pnl)) { skipped++; return; }
 
-    const rawContracts = getCell(row, mapping.contracts);
-    const contracts = parseInt(rawContracts) || 5;
+    // Quantity can be negative → Short; use abs for contracts count
+    const rawQty = getCell(row, mapping.contracts);
+    const qtyNum = parseFloat(rawQty) || 0;
+    const contracts = Math.max(1, Math.abs(Math.round(qtyNum)));
+
+    // Direction: explicit column wins; else derive from Quantity sign or PnL context
+    let dir = 'Long';
+    if (mapping.dir) {
+      dir = parseDir(getCell(row, mapping.dir));
+    } else if (qtyNum < 0) {
+      dir = 'Short';
+    }
 
     const trade = {
       id: Date.now().toString() + Math.random().toString(36).slice(2),
       date: parseDate(getCell(row, mapping.date)),
-      symbol: (getCell(row, mapping.symbol) || 'MNQ').toUpperCase(),
-      dir: parseDir(getCell(row, mapping.dir)),
-      contracts: Math.max(1, contracts),
+      symbol: normalizeSymbol(getCell(row, mapping.symbol)),
+      dir,
+      contracts,
       pnl,
       note: 'CSV-Import',
     };
