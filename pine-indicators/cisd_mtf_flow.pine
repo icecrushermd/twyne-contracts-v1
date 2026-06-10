@@ -62,6 +62,7 @@ slMultBase   = input.float(1.5, "SL = ATR ×", minval = 0.3, step = 0.1, group =
 rrChop       = input.float(1.5, "TP (R) im Chop", minval = 0.5, step = 0.25, group = grpRisk)
 rrTrend      = input.float(3.0, "TP (R) im Trend", minval = 0.5, step = 0.25, group = grpRisk)
 showTradeLevels = input.bool(true, "Entry/SL/TP Linien bei LTF-Flip zeichnen", group = grpRisk)
+tradeTimeoutBars = input.int(90, "Setup-Timeout (Bars)", minval = 10, group = grpRisk, tooltip = "Nach so vielen Bars ohne SL/TP-Treffer wird das Setup als abgelaufen markiert.")
 
 grpQT = "Quarter Theory"
 showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
@@ -72,6 +73,7 @@ vpCycle     = input.string("6H", "Profil-Zyklus", options = ["90m", "6H", "Daily
 vpValueArea = input.float(70, "Value Area %", minval = 50, maxval = 95, group = grpVP)
 vpPocColor  = input.color(color.new(color.orange, 0), "POC", inline = "vpc", group = grpVP)
 vpVaColor   = input.color(color.new(color.gray, 40), "VAH/VAL", inline = "vpc", group = grpVP)
+tpSnap      = input.bool(true, "TP an POC/VAH/VAL snappen (Confluence)", group = grpVP, tooltip = "Liegt ein Volumen-Level zwischen 0.8x und 1.5x der ATR-Zieldistanz, wird der TP dorthin gelegt statt auf die abstrakte R-Zahl.")
 
 // ============================================================================
 // HELPERS
@@ -478,7 +480,13 @@ rawContracts = stopDist > 0 and pointValue > 0 ? math.floor(riskMoney / (stopDis
 contracts    = math.min(rawContracts, maxContracts)
 riskActual   = contracts * stopDist * pointValue
 
-// Draw Entry/SL/TP when LTF flips into full flow
+// Volume profile levels (assigned in the VP section below, persisted across bars)
+var float pocPxG = na
+var float vahPxG = na
+var float valPxG = na
+
+// Trade setup state machine: drawn at LTF flip (only if sizable), then either
+// TP hit / SL hit / flow invalidation / timeout -> levels are grayed out.
 var line  entryLine = na
 var line  slLine    = na
 var line  tpLine    = na
@@ -486,11 +494,33 @@ var label entryLbl  = na
 var label slLbl     = na
 var label tpLbl     = na
 
-if showTradeLevels and (ltfFlipToLong or ltfFlipToShort)
+var int   tradeDir      = 0
+var float tradeSL       = na
+var float tradeTP       = na
+var int   tradeStartBar = na
+
+bool newSignal = showTradeLevels and (ltfFlipToLong or ltfFlipToShort) and contracts > 0
+
+if newSignal
     dirSign  = ltfFlipToLong ? 1 : -1
     entryPx  = close
     slPx     = entryPx - dirSign * stopDist
     tpPx     = entryPx + dirSign * tpDist
+    bool snapped = false
+    if tpSnap
+        float[] vpLvls = array.from(pocPxG, vahPxG, valPxG)
+        float bestDiff = -1.0
+        for i = 0 to 2
+            float lvl = array.get(vpLvls, i)
+            if not na(lvl)
+                float dist = (lvl - entryPx) * dirSign
+                if dist >= 0.8 * tpDist and dist <= 1.5 * tpDist
+                    float diff = math.abs(dist - tpDist)
+                    if bestDiff < 0 or diff < bestDiff
+                        bestDiff := diff
+                        tpPx := lvl
+                        snapped := true
+    rrEff = stopDist > 0 ? math.abs(tpPx - entryPx) / stopDist : rrRatio
     line.delete(entryLine), label.delete(entryLbl)
     line.delete(slLine),    label.delete(slLbl)
     line.delete(tpLine),    label.delete(tpLbl)
@@ -499,9 +529,29 @@ if showTradeLevels and (ltfFlipToLong or ltfFlipToShort)
     tpLine    := line.new(bar_index, tpPx, bar_index + lookAheadBars, tpPx, color = color.new(color.green, 0), width = lineWidth, style = line.style_dashed)
     entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + " | " + str.tostring(contracts) + "x", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
     slLbl     := label.new(bar_index + lookAheadBars, slPx, "SL " + str.tostring(slPx, format.mintick) + " (" + str.tostring(slMult, "#.#") + "×ATR)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.red, size = size.small)
-    tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
+    tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R" + (snapped ? ", VP-Level" : "") + ")", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
+    tradeDir      := dirSign
+    tradeSL       := slPx
+    tradeTP       := tpPx
+    tradeStartBar := bar_index
+else if tradeDir != 0
+    string endStatus = na
+    if (tradeDir == 1 and low <= tradeSL) or (tradeDir == -1 and high >= tradeSL)
+        endStatus := "SL hit"
+    else if (tradeDir == 1 and high >= tradeTP) or (tradeDir == -1 and low <= tradeTP)
+        endStatus := "TP hit ✓"
+    else if curFlow != tradeDir
+        endStatus := "invalidiert (Flow)"
+    else if bar_index - tradeStartBar > tradeTimeoutBars
+        endStatus := "Timeout"
+    if not na(endStatus)
+        grayCol = color.new(color.gray, 55)
+        line.set_color(entryLine, grayCol), line.set_color(slLine, grayCol), line.set_color(tpLine, grayCol)
+        label.set_textcolor(entryLbl, grayCol), label.set_textcolor(slLbl, grayCol), label.set_textcolor(tpLbl, grayCol)
+        label.set_text(entryLbl, label.get_text(entryLbl) + "  [" + endStatus + "]")
+        tradeDir := 0
 
-if not na(entryLine)
+if not na(entryLine) and tradeDir != 0
     line.set_x2(entryLine, bar_index + lookAheadBars), label.set_x(entryLbl, bar_index + lookAheadBars)
     line.set_x2(slLine, bar_index + lookAheadBars),    label.set_x(slLbl, bar_index + lookAheadBars)
     line.set_x2(tpLine, bar_index + lookAheadBars),    label.set_x(tpLbl, bar_index + lookAheadBars)
@@ -610,6 +660,9 @@ if showVP
         float pocPx = (vpBase + pocOff) * vpStep
         float vahPx = (vpBase + hi) * vpStep
         float valPx = (vpBase + lo) * vpStep
+        pocPxG := pocPx
+        vahPxG := vahPx
+        valPxG := valPx
 
         if na(pocLine)
             pocLine := line.new(vpStartT, pocPx, time, pocPx, xloc = xloc.bar_time, color = vpPocColor, width = 2)
@@ -631,6 +684,19 @@ else if not na(pocLine)
 
 f_glyph(int s) => s == 1 ? "▲" : s == -1 ? "▼" : "·"
 f_glyphCol(int s) => s == 1 ? color.new(color.lime, 0) : s == -1 ? color.new(color.red, 0) : color.new(color.gray, 30)
+
+// Bars since the CISD state last flipped (counted in chart bars)
+var int htfFlipAt = 0
+var int mtfFlipAt = 0
+var int ltfFlipAt = 0
+if htfCISD != htfCISD[1]
+    htfFlipAt := bar_index
+if mtfCISD != mtfCISD[1]
+    mtfFlipAt := bar_index
+if ltfCISD != ltfCISD[1]
+    ltfFlipAt := bar_index
+
+f_cisdCell(int s, int flipAt) => f_glyph(s) + " " + str.tostring(bar_index - flipAt)
 
 f_structTxt(int trend, bool chU, bool chD, bool bU, bool bD) =>
     g = trend == 1 ? "▲" : trend == -1 ? "▼" : "·"
@@ -655,24 +721,22 @@ if showTable and barstate.islast
     table.cell(tbl, 0, 1, "TF", text_color = mutedCol, text_size = size.tiny)
     table.cell(tbl, 1, 1, "CISD", text_color = mutedCol, text_size = size.tiny)
     table.cell(tbl, 2, 1, "Strukt", text_color = mutedCol, text_size = size.tiny)
-    if showQT
-        table.cell(tbl, 3, 1, "Q", text_color = mutedCol, text_size = size.tiny)
 
     // TF rows: HTF -> Weekly Q, MTF -> Daily Q, LTF -> 6H Q
     table.cell(tbl, 0, 2, htf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 2, f_glyph(htfCISD), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 2, f_cisdCell(htfCISD, htfFlipAt), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 2, f_structTxt(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = f_glyphCol(htfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 2, "W " + f_qTxt(qW), text_color = mutedCol, text_size = tSize)
 
     table.cell(tbl, 0, 3, mtf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 3, f_glyph(mtfCISD), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 3, f_cisdCell(mtfCISD, mtfFlipAt), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 3, f_structTxt(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = f_glyphCol(mtfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 3, "D " + f_qTxt(qD), text_color = mutedCol, text_size = tSize)
 
     table.cell(tbl, 0, 4, ltf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 4, f_glyph(ltfCISD), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 4, f_cisdCell(ltfCISD, ltfFlipAt), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 4, f_structTxt(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = f_glyphCol(ltfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 4, "6H " + f_qTxt(q6), text_color = mutedCol, text_size = tSize)
@@ -683,7 +747,9 @@ if showTable and barstate.islast
 
     // SL/TP + contracts strip
     sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : color.new(color.lime, 0)
-    sizeTxt = contracts <= 0 ? "0x – Stop zu groß!" : str.tostring(contracts) + "x" + (rawContracts > maxContracts ? " (Cap)" : "")
+    microPV = pointValue / 10.0
+    microQty = stopDist > 0 and microPV > 0 ? math.floor(riskMoney / (stopDist * microPV)) : 0
+    sizeTxt = contracts <= 0 ? (microQty > 0 ? "0x → Micro ($" + str.tostring(microPV, "#.##") + "/Pkt): " + str.tostring(microQty) + "x" : "0x – Stop zu groß!") : str.tostring(contracts) + "x" + (rawContracts > maxContracts ? " (Cap)" : "")
     table.cell(tbl, 0, 6, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.tiny)
 
     // Account strip
