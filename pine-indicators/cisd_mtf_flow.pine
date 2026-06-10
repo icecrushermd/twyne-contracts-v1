@@ -1,0 +1,423 @@
+//@version=6
+indicator("CISD Multi-Timeframe Flow [neo|]", "CISD MTF Flow", overlay = true, max_lines_count = 200, max_labels_count = 200)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+grpCISD = "CISD Darstellung (Chart-TF)"
+bullishBreakColor = input.color(color.new(color.lime, 0), "Bull CISD", inline = "bup", group = grpCISD)
+bearishBreakColor = input.color(color.new(color.red, 0), "Bear CISD", inline = "bep", group = grpCISD)
+bullStr           = input.string("+CISD", "Text", inline = "bup", group = grpCISD)
+bearStr           = input.string("-CISD", "Text", inline = "bep", group = grpCISD)
+bullishAlerts     = input.bool(false, "Alert?", inline = "bup", group = grpCISD, tooltip = "Alert wenn der Kurs über das aktuelle '+CISD' Level schließt.")
+bearishAlerts     = input.bool(false, "Alert?", inline = "bep", group = grpCISD, tooltip = "Alert wenn der Kurs unter das aktuelle '-CISD' Level schließt.")
+lineWidth         = input.int(1, "Line Width", minval = 1, maxval = 5, group = grpCISD)
+lookAheadBars     = input.int(5, "Line Extension Bars", minval = 1, maxval = 20, group = grpCISD)
+styleOption       = input.string("Solid (─)", "Line Style", options = ["Solid (─)", "Dotted (┈)", "Dashed (╌)"], group = grpCISD)
+keepLevels        = input.bool(false, "Keep old CISD levels", group = grpCISD)
+
+grpStruct = "Strukturbrüche (BOS / CHoCH)"
+showStructureBreaks = input.bool(true, "CHoCH Marker auf Chart anzeigen", group = grpStruct)
+pivLeft  = input.int(5, "Pivot Left Bars", minval = 2, group = grpStruct)
+pivRight = input.int(2, "Pivot Right Bars", minval = 1, group = grpStruct)
+
+grpMTF = "Multi-Timeframe Lieferstatus"
+tfPreset = input.string("Daytrade (D / 1H / 5m)", "Preset",
+     options = ["Custom", "Daytrade (D / 1H / 5m)", "Swing (1W / 4H / 15m)", "Scalp (4H / 15m / 1m)"], group = grpMTF)
+htfCustom = input.timeframe("D", "HTF (Custom)", group = grpMTF)
+mtfCustom = input.timeframe("60", "MTF (Custom)", group = grpMTF)
+ltfCustom = input.timeframe("5", "LTF (Custom)", group = grpMTF)
+useConfirmed = input.bool(false, "Nur bestätigte HTF/MTF/LTF-Bars (kein Repaint, 1 Bar Delay)", group = grpMTF)
+
+grpTable = "Tabelle"
+showTable     = input.bool(true, "Tabelle anzeigen", group = grpTable)
+tablePosition = input.string("Top Right", "Position",
+     options = ["Top Right", "Bottom Right", "Middle Right", "Bottom Center", "Middle Left"], group = grpTable)
+tableSizeOpt  = input.string("Normal", "Schriftgröße", options = ["Tiny", "Small", "Normal", "Large"], group = grpTable)
+
+grpAlert = "Flow Alerts"
+alertOnFlowChange = input.bool(false, "Alert bei Wechsel zu Longflow / Shortflow", group = grpAlert)
+alertOnLTFFlip    = input.bool(false, "Alert wenn LTF in Richtung von HTF+MTF dreht (Pullback Ende)", group = grpAlert)
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+lineStyle = styleOption == "Dotted (┈)" ? line.style_dotted : styleOption == "Dashed (╌)" ? line.style_dashed : line.style_solid
+
+f_tablePos(pos) =>
+    switch pos
+        "Top Right"     => position.top_right
+        "Bottom Right"  => position.bottom_right
+        "Middle Right"  => position.middle_right
+        "Bottom Center" => position.bottom_center
+        "Middle Left"   => position.middle_left
+        => position.top_right
+
+tSize = switch tableSizeOpt
+    "Tiny"  => size.tiny
+    "Small" => size.small
+    "Large" => size.large
+    => size.normal
+
+[htf, mtf, ltf] = switch tfPreset
+    "Daytrade (D / 1H / 5m)"   => ["D", "60", "5"]
+    "Swing (1W / 4H / 15m)"    => ["W", "240", "15"]
+    "Scalp (4H / 15m / 1m)"    => ["240", "15", "1"]
+    => [htfCustom, mtfCustom, ltfCustom]
+
+// ============================================================================
+// CISD STATE ENGINE (no drawing -> safe for request.security)
+// Returns the most recently CONFIRMED delivery state:
+//   1  = Bullish CISD confirmed (long delivery)
+//  -1  = Bearish CISD confirmed (short delivery)
+//   0  = not yet determined
+// ============================================================================
+f_cisdState() =>
+    var float structTop    = high
+    var float structBottom = low
+
+    var bool isBullishPullback = false
+    var bool isBearishPullback = false
+
+    var float potentialTop    = na
+    var float potentialBottom = na
+
+    var int bullBreakIdx = na
+    var int bearBreakIdx = na
+
+    var float plusLevel  = na   // pending "+CISD" level (confirms Bullish)
+    var float minusLevel = na   // pending "-CISD" level (confirms Bearish)
+    var bool  plusActive  = false
+    var bool  minusActive = false
+
+    var int state = 0
+
+    bearishPB = close[1] > open[1]
+    bullishPB = close[1] < open[1]
+
+    if bearishPB and not isBearishPullback
+        isBearishPullback := true
+        potentialTop := open[1]
+        bullBreakIdx := bar_index[1]
+
+    if bullishPB and not isBullishPullback
+        isBullishPullback := true
+        potentialBottom := open[1]
+        bearBreakIdx := bar_index[1]
+
+    if isBullishPullback
+        if open < potentialBottom
+            potentialBottom := open
+            bearBreakIdx := bar_index
+        if close < open and open > potentialBottom
+            potentialBottom := open
+            bearBreakIdx := bar_index
+
+    if isBearishPullback
+        if open > potentialTop
+            potentialTop := open
+            bullBreakIdx := bar_index
+        if close > open and open < potentialTop
+            potentialTop := open
+            bullBreakIdx := bar_index
+
+    // Bearish structure break -> arms a "+CISD" (bullish reversal) level
+    if low < structBottom
+        structBottom := low
+        if isBearishPullback and (bar_index - bullBreakIdx != 0)
+            structTop := math.max(high[bar_index - bullBreakIdx], high[bar_index - bullBreakIdx + 1])
+            isBearishPullback := false
+            plusLevel := potentialTop
+            plusActive := true
+        else if close[1] > open[1] and close < open
+            structTop := high[1]
+            isBearishPullback := false
+            plusLevel := potentialTop
+            plusActive := true
+
+    // Bullish structure break -> arms a "-CISD" (bearish reversal) level
+    if high > structTop
+        structTop := high
+        if isBullishPullback and (bar_index - bearBreakIdx != 0)
+            structBottom := math.min(low[bar_index - bearBreakIdx], low[bar_index - bearBreakIdx + 1])
+            isBullishPullback := false
+            minusLevel := potentialBottom
+            minusActive := true
+        else if close[1] < open[1] and close > open
+            structBottom := low[1]
+            isBullishPullback := false
+            minusLevel := potentialBottom
+            minusActive := true
+
+    if plusActive and close > plusLevel
+        state := 1
+        plusActive := false
+
+    if minusActive and close < minusLevel
+        state := -1
+        minusActive := false
+
+    state
+
+// ============================================================================
+// STRUCTURE ENGINE (BOS / CHoCH via fractal pivots)
+// Returns: trend (1 bullish HH/HL, -1 bearish LH/LL, 0 undefined),
+//          chochUp (bullish CHoCH just confirmed), chochDown (bearish CHoCH),
+//          pivotPrice (price of the pivot that triggered the event)
+// ============================================================================
+f_structure(lbLen, rbLen) =>
+    var int trend = 0
+    var float lastPH = na
+    var float lastPL = na
+    bool chochUp = false
+    bool chochDown = false
+    float pivotPrice = na
+
+    ph = ta.pivothigh(lbLen, rbLen)
+    pl = ta.pivotlow(lbLen, rbLen)
+
+    if not na(ph)
+        if not na(lastPH) and ph <= lastPH and trend == 1
+            chochDown := true
+            trend := -1
+        else if not na(lastPH) and ph > lastPH
+            trend := 1
+        lastPH := ph
+        pivotPrice := ph
+
+    if not na(pl)
+        if not na(lastPL) and pl >= lastPL and trend == -1
+            chochUp := true
+            trend := 1
+        else if not na(lastPL) and pl < lastPL
+            trend := -1
+        lastPL := pl
+        pivotPrice := pl
+
+    [trend, chochUp, chochDown, pivotPrice]
+
+// ============================================================================
+// MULTI-TIMEFRAME DATA
+// ============================================================================
+
+htfCISD_raw = request.security(syminfo.tickerid, htf, f_cisdState(), lookahead = barmerge.lookahead_off)
+mtfCISD_raw = request.security(syminfo.tickerid, mtf, f_cisdState(), lookahead = barmerge.lookahead_off)
+ltfCISD_raw = request.security(syminfo.tickerid, ltf, f_cisdState(), lookahead = barmerge.lookahead_off)
+
+htfCISD = useConfirmed ? htfCISD_raw[1] : htfCISD_raw
+mtfCISD = useConfirmed ? mtfCISD_raw[1] : mtfCISD_raw
+ltfCISD = useConfirmed ? ltfCISD_raw[1] : ltfCISD_raw
+
+[htfTrend_raw, htfChU_raw, htfChD_raw, _htfPP] = request.security(syminfo.tickerid, htf, f_structure(pivLeft, pivRight), lookahead = barmerge.lookahead_off)
+[mtfTrend_raw, mtfChU_raw, mtfChD_raw, _mtfPP] = request.security(syminfo.tickerid, mtf, f_structure(pivLeft, pivRight), lookahead = barmerge.lookahead_off)
+[ltfTrend_raw, ltfChU_raw, ltfChD_raw, _ltfPP] = request.security(syminfo.tickerid, ltf, f_structure(pivLeft, pivRight), lookahead = barmerge.lookahead_off)
+
+htfTrend = useConfirmed ? htfTrend_raw[1] : htfTrend_raw
+mtfTrend = useConfirmed ? mtfTrend_raw[1] : mtfTrend_raw
+ltfTrend = useConfirmed ? ltfTrend_raw[1] : ltfTrend_raw
+
+htfChU = useConfirmed ? htfChU_raw[1] : htfChU_raw
+htfChD = useConfirmed ? htfChD_raw[1] : htfChD_raw
+mtfChU = useConfirmed ? mtfChU_raw[1] : mtfChU_raw
+mtfChD = useConfirmed ? mtfChD_raw[1] : mtfChD_raw
+ltfChU = useConfirmed ? ltfChU_raw[1] : ltfChU_raw
+ltfChD = useConfirmed ? ltfChD_raw[1] : ltfChD_raw
+
+// ============================================================================
+// FLOW LOGIC
+// ============================================================================
+
+allBull   = htfCISD == 1  and mtfCISD == 1  and ltfCISD == 1
+allBear   = htfCISD == -1 and mtfCISD == -1 and ltfCISD == -1
+htfMtfBull = htfCISD == 1  and mtfCISD == 1
+htfMtfBear = htfCISD == -1 and mtfCISD == -1
+
+flowText = allBull ? "LONGFLOW" : allBear ? "SHORTFLOW" : "MIXED"
+flowColor = allBull ? color.new(color.green, 0) : allBear ? color.new(color.red, 0) : color.new(color.gray, 50)
+
+flowDetail = allBull ? "Alle TFs bullish" :
+     allBear ? "Alle TFs bearish" :
+     htfMtfBull and ltfCISD == -1 ? "Pullback (Long Bias)" :
+     htfMtfBear and ltfCISD == 1 ? "Pullback (Short Bias)" :
+     "Uneinheitlich"
+
+// ============================================================================
+// CHART-TF: CISD DRAWING (lines / labels)
+// ============================================================================
+
+var float c_structTop    = high
+var float c_structBottom = low
+
+var bool c_isBullishPullback = false
+var bool c_isBearishPullback = false
+
+var float c_potentialTop    = na
+var float c_potentialBottom = na
+
+var int c_bullBreakIdx = na
+var int c_bearBreakIdx = na
+
+var line  plusLine   = na
+var label plusLabel  = na
+var line  minusLine  = na
+var label minusLabel = na
+var bool  plusActiveC  = false
+var bool  minusActiveC = false
+
+c_bearishPB = close[1] > open[1]
+c_bullishPB = close[1] < open[1]
+
+if c_bearishPB and not c_isBearishPullback
+    c_isBearishPullback := true
+    c_potentialTop := open[1]
+    c_bullBreakIdx := bar_index[1]
+
+if c_bullishPB and not c_isBullishPullback
+    c_isBullishPullback := true
+    c_potentialBottom := open[1]
+    c_bearBreakIdx := bar_index[1]
+
+if c_isBullishPullback
+    if open < c_potentialBottom
+        c_potentialBottom := open
+        c_bearBreakIdx := bar_index
+    if close < open and open > c_potentialBottom
+        c_potentialBottom := open
+        c_bearBreakIdx := bar_index
+
+if c_isBearishPullback
+    if open > c_potentialTop
+        c_potentialTop := open
+        c_bullBreakIdx := bar_index
+    if close > open and open < c_potentialTop
+        c_potentialTop := open
+        c_bullBreakIdx := bar_index
+
+if low < c_structBottom
+    c_structBottom := low
+    if c_isBearishPullback and (bar_index - c_bullBreakIdx != 0)
+        c_structTop := math.max(high[bar_index - c_bullBreakIdx], high[bar_index - c_bullBreakIdx + 1])
+        c_isBearishPullback := false
+        if not keepLevels and not na(plusLine)
+            line.delete(plusLine)
+            label.delete(plusLabel)
+        plusLine := line.new(c_bullBreakIdx, c_potentialTop, bar_index + lookAheadBars, c_potentialTop, color = bullishBreakColor, width = lineWidth, style = lineStyle)
+        plusLabel := label.new(bar_index + lookAheadBars, c_potentialTop, bullStr, color = color.new(color.white, 100), textcolor = bullishBreakColor, style = label.style_label_left, size = size.small, text_formatting = text.format_italic)
+        plusActiveC := true
+    else if close[1] > open[1] and close < open
+        c_structTop := high[1]
+        c_isBearishPullback := false
+        if not keepLevels and not na(plusLine)
+            line.delete(plusLine)
+            label.delete(plusLabel)
+        plusLine := line.new(c_bullBreakIdx, c_potentialTop, bar_index + lookAheadBars, c_potentialTop, color = bullishBreakColor, width = lineWidth, style = lineStyle)
+        plusLabel := label.new(bar_index + lookAheadBars, c_potentialTop, bullStr, color = color.new(color.white, 100), textcolor = bullishBreakColor, style = label.style_label_left, size = size.small, text_formatting = text.format_italic)
+        plusActiveC := true
+
+if high > c_structTop
+    c_structTop := high
+    if c_isBullishPullback and (bar_index - c_bearBreakIdx != 0)
+        c_structBottom := math.min(low[bar_index - c_bearBreakIdx], low[bar_index - c_bearBreakIdx + 1])
+        c_isBullishPullback := false
+        if not keepLevels and not na(minusLine)
+            line.delete(minusLine)
+            label.delete(minusLabel)
+        minusLine := line.new(c_bearBreakIdx, c_potentialBottom, bar_index + lookAheadBars, c_potentialBottom, color = bearishBreakColor, width = lineWidth, style = lineStyle)
+        minusLabel := label.new(bar_index + lookAheadBars, c_potentialBottom, bearStr, color = color.new(color.white, 100), textcolor = bearishBreakColor, style = label.style_label_left, size = size.small, text_formatting = text.format_italic)
+        minusActiveC := true
+    else if close[1] < open[1] and close > open
+        c_structBottom := low[1]
+        c_isBullishPullback := false
+        if not keepLevels and not na(minusLine)
+            line.delete(minusLine)
+            label.delete(minusLabel)
+        minusLine := line.new(c_bearBreakIdx, c_potentialBottom, bar_index + lookAheadBars, c_potentialBottom, color = bearishBreakColor, width = lineWidth, style = lineStyle)
+        minusLabel := label.new(bar_index + lookAheadBars, c_potentialBottom, bearStr, color = color.new(color.white, 100), textcolor = bearishBreakColor, style = label.style_label_left, size = size.small, text_formatting = text.format_italic)
+        minusActiveC := true
+
+if plusActiveC
+    line.set_x2(plusLine, bar_index + lookAheadBars)
+    label.set_x(plusLabel, bar_index + lookAheadBars)
+    if close > line.get_y2(plusLine)
+        plusActiveC := false
+        if bullishAlerts
+            alert("Bullish CISD confirmed (" + syminfo.ticker + ", " + timeframe.period + ")", alert.freq_once_per_bar_close)
+
+if minusActiveC
+    line.set_x2(minusLine, bar_index + lookAheadBars)
+    label.set_x(minusLabel, bar_index + lookAheadBars)
+    if close < line.get_y2(minusLine)
+        minusActiveC := false
+        if bearishAlerts
+            alert("Bearish CISD confirmed (" + syminfo.ticker + ", " + timeframe.period + ")", alert.freq_once_per_bar_close)
+
+// ============================================================================
+// CHART-TF: CHoCH MARKERS
+// ============================================================================
+
+[_chartTrend, chochUp, chochDown, pivotPrice] = f_structure(pivLeft, pivRight)
+
+if showStructureBreaks and chochUp
+    label.new(bar_index - pivRight, pivotPrice, "CHoCH▲", style = label.style_label_up, color = color.new(color.white, 100), textcolor = color.lime, size = size.tiny, text_formatting = text.format_bold)
+
+if showStructureBreaks and chochDown
+    label.new(bar_index - pivRight, pivotPrice, "CHoCH▼", style = label.style_label_down, color = color.new(color.white, 100), textcolor = color.red, size = size.tiny, text_formatting = text.format_bold)
+
+// ============================================================================
+// FLOW ALERTS
+// ============================================================================
+
+var int prevFlow = 0
+curFlow = allBull ? 1 : allBear ? -1 : 0
+
+if alertOnFlowChange and curFlow != prevFlow and curFlow != 0
+    alert("Flow-Wechsel: " + (curFlow == 1 ? "LONGFLOW" : "SHORTFLOW") + " (" + syminfo.ticker + ")", alert.freq_once_per_bar_close)
+prevFlow := curFlow
+
+ltfFlipToLong  = htfCISD == 1  and mtfCISD == 1  and ltfCISD == 1  and ltfCISD[1] != 1
+ltfFlipToShort = htfCISD == -1 and mtfCISD == -1 and ltfCISD == -1 and ltfCISD[1] != -1
+
+if alertOnLTFFlip and (ltfFlipToLong or ltfFlipToShort)
+    alert("LTF CISD Flip in Trendrichtung (" + (ltfFlipToLong ? "Long" : "Short") + ") - " + syminfo.ticker, alert.freq_once_per_bar_close)
+
+// ============================================================================
+// TABLE
+// ============================================================================
+
+f_cisdLabel(state) =>
+    state == 1 ? "Bullish" : state == -1 ? "Bearish" : "—"
+
+f_cisdColor(state) =>
+    state == 1 ? color.new(color.green, 70) : state == -1 ? color.new(color.red, 70) : color.new(color.gray, 85)
+
+f_structLabel(trend, chU, chD) =>
+    base = trend == 1 ? "Bullish" : trend == -1 ? "Bearish" : "—"
+    chU ? base + " (CHoCH▲)" : chD ? base + " (CHoCH▼)" : base
+
+f_structColor(trend) =>
+    trend == 1 ? color.new(color.green, 70) : trend == -1 ? color.new(color.red, 70) : color.new(color.gray, 85)
+
+if showTable and barstate.islast
+    var table tbl = table.new(f_tablePos(tablePosition), 3, 5, bgcolor = chart.bg_color, border_color = chart.fg_color, frame_color = chart.fg_color, frame_width = 1, border_width = 1)
+
+    table.cell(tbl, 0, 0, syminfo.ticker, text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 0, "CISD", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 0, "Struktur", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+
+    table.cell(tbl, 0, 1, "HTF " + htf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 1, f_cisdLabel(htfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(htfCISD), text_size = tSize)
+    table.cell(tbl, 2, 1, f_structLabel(htfTrend, htfChU, htfChD), text_color = chart.fg_color, bgcolor = f_structColor(htfTrend), text_size = tSize)
+
+    table.cell(tbl, 0, 2, "MTF " + mtf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 2, f_cisdLabel(mtfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(mtfCISD), text_size = tSize)
+    table.cell(tbl, 2, 2, f_structLabel(mtfTrend, mtfChU, mtfChD), text_color = chart.fg_color, bgcolor = f_structColor(mtfTrend), text_size = tSize)
+
+    table.cell(tbl, 0, 3, "LTF " + ltf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 3, f_cisdLabel(ltfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(ltfCISD), text_size = tSize)
+    table.cell(tbl, 2, 3, f_structLabel(ltfTrend, ltfChU, ltfChD), text_color = chart.fg_color, bgcolor = f_structColor(ltfTrend), text_size = tSize)
+
+    table.cell(tbl, 0, 4, "Flow", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 4, flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 4, flowDetail, text_color = chart.fg_color, bgcolor = color.new(color.gray, 85), text_size = tSize)
