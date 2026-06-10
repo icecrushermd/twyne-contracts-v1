@@ -40,6 +40,19 @@ grpAlert = "Flow Alerts"
 alertOnFlowChange = input.bool(false, "Alert bei Wechsel zu Longflow / Shortflow", group = grpAlert)
 alertOnLTFFlip    = input.bool(false, "Alert wenn LTF in Richtung von HTF+MTF dreht (Pullback Ende)", group = grpAlert)
 
+grpRisk = "Risiko & Positionsgröße"
+accountSize  = input.float(10000, "Kontogröße ($)", minval = 100, step = 500, group = grpRisk)
+riskPct      = input.float(1.0, "Risiko pro Trade (%)", minval = 0.1, maxval = 10, step = 0.25, group = grpRisk)
+maxContracts = input.int(20, "Max. Kontrakte (Cap)", minval = 1, group = grpRisk)
+atrLen       = input.int(14, "ATR Länge", minval = 1, group = grpRisk)
+adxLen       = input.int(14, "ADX Länge", minval = 1, group = grpRisk)
+adxTrendTh   = input.float(25, "ADX Trend-Schwelle", minval = 5, group = grpRisk, tooltip = "ADX darüber = Trendmarkt: weiterer Stop, höheres R-Ziel.")
+adxChopTh    = input.float(18, "ADX Chop-Schwelle", minval = 1, group = grpRisk, tooltip = "ADX darunter = Seitwärtsmarkt: Vorsicht, reduziertes Ziel.")
+slMultBase   = input.float(1.5, "SL = ATR ×", minval = 0.3, step = 0.1, group = grpRisk)
+rrChop       = input.float(1.5, "TP (R) im Chop", minval = 0.5, step = 0.25, group = grpRisk)
+rrTrend      = input.float(3.0, "TP (R) im Trend", minval = 0.5, step = 0.25, group = grpRisk)
+showTradeLevels = input.bool(true, "Entry/SL/TP Linien bei LTF-Flip zeichnen", group = grpRisk)
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -383,6 +396,59 @@ if alertOnLTFFlip and (ltfFlipToLong or ltfFlipToShort)
     alert("LTF CISD Flip in Trendrichtung (" + (ltfFlipToLong ? "Long" : "Short") + ") - " + syminfo.ticker, alert.freq_once_per_bar_close)
 
 // ============================================================================
+// RISK MODULE: ATR/ADX-adaptive SL/TP + position sizing
+// ============================================================================
+
+atrVal = ta.atr(atrLen)
+[diPlus, diMinus, adxVal] = ta.dmi(adxLen, adxLen)
+
+// 0 = Chop, 1 = Trend, smooth interpolation in between
+trendFactor = math.min(math.max((adxVal - adxChopTh) / math.max(adxTrendTh - adxChopTh, 0.1), 0.0), 1.0)
+regimeText  = adxVal >= adxTrendTh ? "Trend" : adxVal <= adxChopTh ? "Chop" : "Neutral"
+
+// Stop slightly wider in trend regime (price breathes more), TP scales from rrChop to rrTrend
+slMult  = slMultBase * (1.0 + 0.3 * trendFactor)
+rrRatio = rrChop + (rrTrend - rrChop) * trendFactor
+
+stopDist = atrVal * slMult
+tpDist   = stopDist * rrRatio
+
+// Position sizing: risk budget / (stop distance in points * $ per point)
+riskMoney  = accountSize * riskPct / 100.0
+pointValue = syminfo.pointvalue
+rawContracts = stopDist > 0 and pointValue > 0 ? math.floor(riskMoney / (stopDist * pointValue)) : 0
+contracts    = math.min(rawContracts, maxContracts)
+riskActual   = contracts * stopDist * pointValue
+
+// Draw Entry/SL/TP when LTF flips into full flow
+var line  entryLine = na
+var line  slLine    = na
+var line  tpLine    = na
+var label entryLbl  = na
+var label slLbl     = na
+var label tpLbl     = na
+
+if showTradeLevels and (ltfFlipToLong or ltfFlipToShort)
+    dirSign  = ltfFlipToLong ? 1 : -1
+    entryPx  = close
+    slPx     = entryPx - dirSign * stopDist
+    tpPx     = entryPx + dirSign * tpDist
+    line.delete(entryLine), label.delete(entryLbl)
+    line.delete(slLine),    label.delete(slLbl)
+    line.delete(tpLine),    label.delete(tpLbl)
+    entryLine := line.new(bar_index, entryPx, bar_index + lookAheadBars, entryPx, color = color.new(color.blue, 0), width = lineWidth, style = line.style_solid)
+    slLine    := line.new(bar_index, slPx, bar_index + lookAheadBars, slPx, color = color.new(color.red, 0), width = lineWidth, style = line.style_dashed)
+    tpLine    := line.new(bar_index, tpPx, bar_index + lookAheadBars, tpPx, color = color.new(color.green, 0), width = lineWidth, style = line.style_dashed)
+    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + " | " + str.tostring(contracts) + "x", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
+    slLbl     := label.new(bar_index + lookAheadBars, slPx, "SL " + str.tostring(slPx, format.mintick) + " (" + str.tostring(slMult, "#.#") + "×ATR)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.red, size = size.small)
+    tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
+
+if not na(entryLine)
+    line.set_x2(entryLine, bar_index + lookAheadBars), label.set_x(entryLbl, bar_index + lookAheadBars)
+    line.set_x2(slLine, bar_index + lookAheadBars),    label.set_x(slLbl, bar_index + lookAheadBars)
+    line.set_x2(tpLine, bar_index + lookAheadBars),    label.set_x(tpLbl, bar_index + lookAheadBars)
+
+// ============================================================================
 // TABLE
 // ============================================================================
 
@@ -400,7 +466,7 @@ f_structColor(trend) =>
     trend == 1 ? color.new(color.green, 70) : trend == -1 ? color.new(color.red, 70) : color.new(color.gray, 85)
 
 if showTable and barstate.islast
-    var table tbl = table.new(f_tablePos(tablePosition), 3, 5, bgcolor = chart.bg_color, border_color = chart.fg_color, frame_color = chart.fg_color, frame_width = 1, border_width = 1)
+    var table tbl = table.new(f_tablePos(tablePosition), 3, 9, bgcolor = chart.bg_color, border_color = chart.fg_color, frame_color = chart.fg_color, frame_width = 1, border_width = 1)
 
     table.cell(tbl, 0, 0, syminfo.ticker, text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 1, 0, "CISD", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
@@ -421,3 +487,24 @@ if showTable and barstate.islast
     table.cell(tbl, 0, 4, "Flow", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 1, 4, flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 4, flowDetail, text_color = chart.fg_color, bgcolor = color.new(color.gray, 85), text_size = tSize)
+
+    regimeColor = regimeText == "Trend" ? color.new(color.green, 70) : regimeText == "Chop" ? color.new(color.orange, 70) : color.new(color.gray, 85)
+
+    table.cell(tbl, 0, 5, "Markt", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 5, "ATR " + str.tostring(atrVal, format.mintick), text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 2, 5, "ADX " + str.tostring(adxVal, "#.#") + " (" + regimeText + ")", text_color = chart.fg_color, bgcolor = regimeColor, text_size = tSize)
+
+    table.cell(tbl, 0, 6, "Konto", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 6, "$" + str.tostring(accountSize, "#,###"), text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 2, 6, "Risiko " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###.##"), text_color = chart.fg_color, text_size = tSize)
+
+    table.cell(tbl, 0, 7, "SL / TP", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 7, "SL " + str.tostring(stopDist, format.mintick) + " Pkt (" + str.tostring(slMult, "#.#") + "×ATR)", text_color = chart.fg_color, bgcolor = color.new(color.red, 85), text_size = tSize)
+    table.cell(tbl, 2, 7, "TP " + str.tostring(tpDist, format.mintick) + " Pkt (" + str.tostring(rrRatio, "#.#") + "R)", text_color = chart.fg_color, bgcolor = color.new(color.green, 85), text_size = tSize)
+
+    sizeColor = contracts <= 0 ? color.new(color.red, 60) : regimeText == "Chop" ? color.new(color.orange, 70) : color.new(color.green, 70)
+    sizeNote = contracts <= 0 ? "Stop zu groß fürs Risiko!" : rawContracts > maxContracts ? "Cap aktiv (" + str.tostring(rawContracts) + " möglich)" : "echtes Risiko $" + str.tostring(riskActual, "#,###.##")
+
+    table.cell(tbl, 0, 8, "Kontrakte", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 8, str.tostring(contracts) + "x  ($" + str.tostring(pointValue, "#.##") + "/Pkt)", text_color = chart.fg_color, bgcolor = sizeColor, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 8, sizeNote, text_color = chart.fg_color, text_size = tSize)
