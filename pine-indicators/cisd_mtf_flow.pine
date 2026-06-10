@@ -946,7 +946,7 @@ else if not na(pocLine)
 // ============================================================================
 
 f_glyph(int s) => s == 1 ? "▲" : s == -1 ? "▼" : "·"
-f_glyphCol(int s) => s == 1 ? color.new(color.lime, 0) : s == -1 ? color.new(color.red, 0) : color.new(color.gray, 30)
+f_glyphCol(int s) => s == 1 ? color.new(color.lime, 0) : s == -1 ? color.new(color.red, 0) : color.new(#9598a1, 0)
 
 // Bars since the CISD state last flipped (counted in chart bars)
 var int htfFlipAt = 0
@@ -965,7 +965,8 @@ f_structTxt(int trend, bool chU, bool chD, bool bU, bool bD) =>
     g = trend == 1 ? "▲" : trend == -1 ? "▼" : "·"
     chU or chD ? g + " CHoCH" : bU or bD ? g + " BOS" : g
 
-mutedCol = color.new(chart.fg_color, 45)
+mutedCol = color.new(#b2b5be, 0)
+strongCol = color.new(#d1d4dc, 0)
 
 if showTable and barstate.islast
     int rNext = 6
@@ -978,7 +979,7 @@ if showTable and barstate.islast
     int rSize = rNext
     int rAcc  = rNext + 1
     int tblRows = rNext + 2
-    var table tbl = table.new(f_tablePos(tablePosition), 4, tblRows, bgcolor = color.new(chart.bg_color, 15), frame_color = color.new(chart.fg_color, 60), frame_width = 1, border_width = 0)
+    var table tbl = table.new(f_tablePos(tablePosition), 4, tblRows, bgcolor = color.new(#1e222d, 0), frame_color = color.new(#363a45, 0), frame_width = 1, border_width = 0)
     var bool tblMerged = false
     if not tblMerged
         table.merge_cells(tbl, 0, 0, 3, 0)
@@ -995,39 +996,39 @@ if showTable and barstate.islast
     table.cell(tbl, 0, 0, syminfo.ticker + "   " + flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
 
     // Column headers
-    table.cell(tbl, 0, 1, "TF", text_color = mutedCol, text_size = size.tiny)
-    table.cell(tbl, 1, 1, "CISD", text_color = mutedCol, text_size = size.tiny)
-    table.cell(tbl, 2, 1, "Strukt", text_color = mutedCol, text_size = size.tiny)
+    table.cell(tbl, 0, 1, "TF", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 1, "CISD", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 1, "Strukt", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
 
     // TF rows: HTF -> Weekly Q, MTF -> Daily Q, LTF -> 6H Q
-    table.cell(tbl, 0, 2, htf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 0, 2, htf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 1, 2, f_cisdCell(htfCISD, htfFlipAt), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 2, f_structTxt(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = f_glyphCol(htfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 2, "W " + f_qTxt(qW), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 3, mtf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 0, 3, mtf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 1, 3, f_cisdCell(mtfCISD, mtfFlipAt), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 3, f_structTxt(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = f_glyphCol(mtfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 3, "D " + f_qTxt(qD), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 4, ltf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 0, 4, ltf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 1, 4, f_cisdCell(ltfCISD, ltfFlipAt), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
     table.cell(tbl, 2, 4, f_structTxt(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = f_glyphCol(ltfTrend), text_size = tSize)
     if showQT
         table.cell(tbl, 3, 4, "6H " + f_qTxt(q6), text_color = mutedCol, text_size = tSize)
 
     // Market regime strip
-    regimeCol = regimeText == "Trend" ? color.new(color.lime, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : mutedCol
-    table.cell(tbl, 0, 5, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.tiny)
+    regimeCol = regimeText == "Trend" ? color.new(color.lime, 0) : regimeText == "Chop" ? color.new(#ffa726, 0) : mutedCol
+    table.cell(tbl, 0, 5, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Orderflow / Delta strip
     if showDeltaRow
         cvdCol  = cvd > 0 ? color.new(color.lime, 0) : cvd < 0 ? color.new(color.red, 0) : mutedCol
         absTxt  = sinceBullAbs <= 3 ? "  ·  Abs▲" : sinceBearAbs <= 3 ? "  ·  Abs▼" : ""
         ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt
-        table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.tiny)
+        table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Setup statistics strip (running backtest of current settings)
     if showStatsRow
@@ -1036,14 +1037,14 @@ if showTable and barstate.islast
         float winPct = statWins + statLoss > 0 ? 100.0 * statWins / (statWins + statLoss) : na
         statCol = na(avgR) ? mutedCol : avgR >= 0 ? color.new(color.lime, 0) : color.new(color.red, 0)
         statTxt = statTotal == 0 ? "Setups: –" : "Setups " + str.tostring(statTotal) + "  ·  ✓" + str.tostring(statWins) + " ✗" + str.tostring(statLoss) + "  ·  Win " + (na(winPct) ? "–" : str.tostring(winPct, "#") + "%") + "  ·  Ø " + (avgR >= 0 ? "+" : "") + str.tostring(avgR, "#.##") + "R"
-        table.cell(tbl, 0, rStat, statTxt, text_color = statCol, text_size = size.tiny)
+        table.cell(tbl, 0, rStat, statTxt, text_color = statCol, text_size = size.small, text_formatting = text.format_bold)
 
     // SL/TP + contracts strip
-    sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : color.new(color.lime, 0)
+    sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(#ffa726, 0) : color.new(color.lime, 0)
     microPV = pointValue / 10.0
     microQty = stopDist > 0 and microPV > 0 ? math.floor(riskMoney / (stopDist * microPV)) : 0
     sizeTxt = contracts <= 0 ? (microQty > 0 ? "0x → Micro ($" + str.tostring(microPV, "#.##") + "/Pkt): " + str.tostring(microQty) + "x" : "0x – Stop zu groß!") : str.tostring(contracts) + "x" + (rawContracts > maxContracts ? " (Cap)" : "")
-    table.cell(tbl, 0, rSize, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.tiny)
+    table.cell(tbl, 0, rSize, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Account strip
-    table.cell(tbl, 0, rAcc, "$" + str.tostring(accountSize, "#,###") + "  ·  " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###") + "  ·  $" + str.tostring(pointValue, "#.##") + "/Pkt", text_color = mutedCol, text_size = size.tiny)
+    table.cell(tbl, 0, rAcc, "$" + str.tostring(accountSize, "#,###") + "  ·  " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###") + "  ·  $" + str.tostring(pointValue, "#.##") + "/Pkt", text_color = mutedCol, text_size = size.small)
