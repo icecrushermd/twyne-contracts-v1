@@ -1,5 +1,5 @@
 //@version=6
-indicator("CISD Multi-Timeframe Flow [neo|]", "CISD MTF Flow", overlay = true, max_lines_count = 200, max_labels_count = 200, dynamic_requests = true)
+indicator("CISD Multi-Timeframe Flow [neo|]", "CISD Flow", overlay = true, max_lines_count = 200, max_labels_count = 200, dynamic_requests = true)
 
 // ============================================================================
 // INPUTS
@@ -89,8 +89,6 @@ showDeltaCandles = input.bool(true, "Delta pro Kerze (letzte N Bars)", group = g
 deltaLblCount = input.int(12, "Anzahl Delta-Labels", minval = 1, maxval = 50, group = grpOF)
 showBigTrades = input.bool(true, "Große Prints markieren", group = grpOF, tooltip = "Markiert die volumenstärkste 1m-Subkerze einer Bar, wenn ihr Volumen ein Vielfaches des durchschnittlichen 1m-Volumens beträgt - Annäherung an einen 'großen Print'.")
 bigTradeMult  = input.float(4.0, "Schwelle (× Ø 1m-Volumen)", minval = 1.5, step = 0.5, group = grpOF)
-showHVN = input.bool(true, "High-Volume-Nodes (Limit-Linien)", group = grpVP)
-hvnThresh = input.float(60, "HVN-Schwelle (% von POC)", minval = 20, maxval = 95, group = grpVP, tooltip = "Preis-Level mit mindestens diesem Anteil des POC-Volumens werden als zusätzliche dünne Linien (mögliche Liquidität/Limit-Orders) eingezeichnet.")
 
 grpTrap = "Trapped Buyers/Sellers"
 showTraps = input.bool(true, "Trapped-Marker anzeigen", group = grpTrap, tooltip = "Erkennt Breakouts über/unter ein Pivot mit erhöhtem Volumen, die innerhalb weniger Bars wieder zurückgenommen werden - die Breakout-Trader sitzen 'gefangen' im Verlust.")
@@ -114,6 +112,8 @@ vpValueArea = input.float(70, "Value Area %", minval = 50, maxval = 95, group = 
 vpPocColor  = input.color(color.new(color.orange, 0), "POC", inline = "vpc", group = grpVP)
 vpVaColor   = input.color(color.new(color.gray, 40), "VAH/VAL", inline = "vpc", group = grpVP)
 tpSnap      = input.bool(true, "TP an POC/VAH/VAL snappen (Confluence)", group = grpVP, tooltip = "Liegt ein Volumen-Level zwischen 0.8x und 1.5x der ATR-Zieldistanz, wird der TP dorthin gelegt statt auf die abstrakte R-Zahl.")
+showHVN = input.bool(true, "High-Volume-Nodes (Limit-Linien)", group = grpVP)
+hvnThresh = input.float(60, "HVN-Schwelle (% von POC)", minval = 20, maxval = 95, group = grpVP, tooltip = "Preis-Level mit mindestens diesem Anteil des POC-Volumens werden als zusätzliche dünne Linien (mögliche Liquidität/Limit-Orders) eingezeichnet.")
 
 // ============================================================================
 // HELPERS
