@@ -87,6 +87,16 @@ showDeltaRow = input.bool(true, "Delta-Zeile im Dashboard", group = grpOF)
 showCvdDiv = input.bool(true, "CVD-Divergenz Marker (◆)", group = grpOF, tooltip = "Markiert Pivot-Hochs/-Tiefs, an denen der Preis ein neues Extrem macht, das Session-CVD aber nicht mitzieht - klassisches Erschöpfungssignal.")
 showDeltaCandles = input.bool(true, "Delta pro Kerze (letzte N Bars)", group = grpOF, tooltip = "Zeigt unter jeder Kerze ihr Delta. Dreht das Delta innerhalb der Kerze (erste Hälfte positiv, Schluss negativ oder umgekehrt), wird zusätzlich +→− bzw. −→+ angezeigt.")
 deltaLblCount = input.int(12, "Anzahl Delta-Labels", minval = 1, maxval = 50, group = grpOF)
+showBigTrades = input.bool(true, "Große Prints markieren", group = grpOF, tooltip = "Markiert die volumenstärkste 1m-Subkerze einer Bar, wenn ihr Volumen ein Vielfaches des durchschnittlichen 1m-Volumens beträgt - Annäherung an einen 'großen Print'.")
+bigTradeMult  = input.float(4.0, "Schwelle (× Ø 1m-Volumen)", minval = 1.5, step = 0.5, group = grpOF)
+showHVN = input.bool(true, "High-Volume-Nodes (Limit-Linien)", group = grpVP)
+hvnThresh = input.float(60, "HVN-Schwelle (% von POC)", minval = 20, maxval = 95, group = grpVP, tooltip = "Preis-Level mit mindestens diesem Anteil des POC-Volumens werden als zusätzliche dünne Linien (mögliche Liquidität/Limit-Orders) eingezeichnet.")
+
+grpTrap = "Trapped Buyers/Sellers"
+showTraps = input.bool(true, "Trapped-Marker anzeigen", group = grpTrap, tooltip = "Erkennt Breakouts über/unter ein Pivot mit erhöhtem Volumen, die innerhalb weniger Bars wieder zurückgenommen werden - die Breakout-Trader sitzen 'gefangen' im Verlust.")
+trapLookback = input.int(20, "Pivot-Lookback (Bars)", minval = 5, group = grpTrap)
+trapConfirmBars = input.int(5, "Reclaim-Fenster (Bars)", minval = 1, maxval = 20, group = grpTrap)
+trapVolMult = input.float(1.3, "Breakout-Volumen ≥ × Ø Volumen", minval = 1.0, step = 0.1, group = grpTrap)
 
 grpKZ = "Killzones / Sessions (NY-Zeit)"
 kzFilterMode = input.string("Warnen", "Signal-Filter", options = ["Aus", "Warnen", "Blocken"], group = grpKZ, tooltip = "Prüft beim Signal, ob es in einer aktiven Killzone entsteht. 'Warnen' markiert das Entry-Label mit KZ⚠, 'Blocken' unterdrückt Signale außerhalb der Killzones komplett.")
@@ -607,6 +617,9 @@ float halfDelta = na
 // 1m delta path is always computed (also as flip basis in footprint mode):
 // halfDelta = cumulative delta after the first half of the bar.
 int nOf = array.size(ofCloses)
+float bigV    = na
+float bigPx   = na
+int   bigDir  = 0
 if nOf > 0
     int half = math.max(1, nOf / 2)
     float run = 0.0
@@ -625,7 +638,22 @@ if nOf > 0
             dnVol += v / 2.0
         if i == half - 1
             halfDelta := run
+        if na(bigV) or v > bigV
+            bigV   := v
+            bigPx  := c
+            bigDir := c > o ? 1 : c < o ? -1 : 0
     barDelta := upVol - dnVol
+
+// Rolling average 1m volume per bar (for "big print" comparison)
+var float avg1mVol = na
+float thisAvg1m = nOf > 0 ? volume / nOf : na
+if not na(thisAvg1m)
+    avg1mVol := na(avg1mVol) ? thisAvg1m : avg1mVol + (thisAvg1m - avg1mVol) / 20.0
+
+bool bigTrade = showBigTrades and not na(bigV) and not na(avg1mVol) and bigV > avg1mVol * bigTradeMult
+if bigTrade
+    color bigCol = bigDir == 1 ? color.new(color.lime, 0) : bigDir == -1 ? color.new(color.red, 0) : color.new(#9598a1, 0)
+    label.new(bar_index, bigPx, "●", style = label.style_label_center, color = color.new(color.white, 100), textcolor = bigCol, size = size.small, tooltip = "Großer Print: " + str.tostring(bigV, format.volume) + " (Ø " + str.tostring(avg1mVol, format.volume) + ")")
 
 if deltaSrcIn == "Footprint Bid/Ask (Premium/Ultimate)"
     footprint fp = request.footprint(fpTicksRow)
@@ -665,6 +693,38 @@ if showDeltaCandles and not na(barDelta)
     array.push(dLbls, label.new(bar_index, low, (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + flipTxt, style = label.style_label_up, color = color.new(color.white, 100), textcolor = dCol, size = size.tiny))
     while array.size(dLbls) > deltaLblCount
         label.delete(array.shift(dLbls))
+
+// ============================================================================
+// TRAPPED BUYERS / SELLERS: a breakout above/below a recent pivot on elevated
+// volume that gets reclaimed within a few bars - the breakout traders are
+// now stuck in a loss and may have to capitulate, fueling a reversal.
+// ============================================================================
+float recentHigh = ta.highest(high[1], trapLookback)
+float recentLow  = ta.lowest(low[1], trapLookback)
+
+var int   trapDir   = 0
+var float trapLevel = na
+var int   trapStart = na
+
+if showTraps
+    if trapDir == 0
+        if high > recentHigh and volume > volSma * trapVolMult
+            trapDir   := 1
+            trapLevel := recentHigh
+            trapStart := bar_index
+        else if low < recentLow and volume > volSma * trapVolMult
+            trapDir   := -1
+            trapLevel := recentLow
+            trapStart := bar_index
+    else
+        bool reclaimed = trapDir == 1 ? close < trapLevel : close > trapLevel
+        if reclaimed
+            color trapCol = trapDir == 1 ? color.new(color.red, 0) : color.new(color.lime, 0)
+            line.new(trapStart, trapLevel, bar_index + lookAheadBars, trapLevel, color = trapCol, style = line.style_dashed, width = 1)
+            label.new(bar_index, trapLevel, trapDir == 1 ? "Trapped Longs" : "Trapped Shorts", style = trapDir == 1 ? label.style_label_down : label.style_label_up, color = color.new(color.white, 100), textcolor = trapCol, size = size.small)
+            trapDir := 0
+        else if bar_index - trapStart > trapConfirmBars
+            trapDir := 0
 
 // Does the orderflow (CVD direction + recent absorption) confirm a trade in
 // direction `dir` (1 = long, -1 = short)?
@@ -894,6 +954,7 @@ var line  pocLine = na
 var line  vahLine = na
 var line  valLine = na
 var label pocLbl  = na
+var line[] hvnLines = array.new_line()
 
 if showVP
     if na(vpLastKey) or vpKey != vpLastKey
@@ -953,6 +1014,19 @@ if showVP
         vahPxG := vahPx
         valPxG := valPx
 
+        // High-volume nodes outside the value area: local volume peaks that
+        // could hold resting limit liquidity / act as support-resistance.
+        while array.size(hvnLines) > 0
+            line.delete(array.pop(hvnLines))
+        if showHVN
+            float hvnTarget = pocV * hvnThresh / 100.0
+            for i = 1 to sz - 2
+                if (i < lo or i > hi) and i != pocOff
+                    float v = array.get(vpVols, i)
+                    if v >= hvnTarget and v > array.get(vpVols, i - 1) and v > array.get(vpVols, i + 1) and array.size(hvnLines) < 4
+                        float hvnPx = (vpBase + i) * vpStep
+                        array.push(hvnLines, line.new(vpStartT, hvnPx, time, hvnPx, xloc = xloc.bar_time, color = color.new(#9598a1, 30), style = line.style_dotted, width = 1))
+
         if na(pocLine)
             pocLine := line.new(vpStartT, pocPx, time, pocPx, xloc = xloc.bar_time, color = vpPocColor, width = 2)
             vahLine := line.new(vpStartT, vahPx, time, vahPx, xloc = xloc.bar_time, color = vpVaColor, style = line.style_dotted)
@@ -966,6 +1040,8 @@ if showVP
 else if not na(pocLine)
     line.delete(pocLine), line.delete(vahLine), line.delete(valLine), label.delete(pocLbl)
     pocLine := na
+    while array.size(hvnLines) > 0
+        line.delete(array.pop(hvnLines))
 
 // ============================================================================
 // DASHBOARD (compact)
