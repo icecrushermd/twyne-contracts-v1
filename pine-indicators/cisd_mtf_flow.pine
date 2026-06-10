@@ -44,6 +44,16 @@ grpRisk = "Risiko & Positionsgröße"
 accountSize  = input.float(10000, "Kontogröße ($)", minval = 100, step = 500, group = grpRisk)
 riskPct      = input.float(1.0, "Risiko pro Trade (%)", minval = 0.1, maxval = 10, step = 0.25, group = grpRisk)
 maxContracts = input.int(20, "Max. Kontrakte (Cap)", minval = 1, group = grpRisk)
+pvOverride = input.string("Chart-Symbol (auto)", "Trading-Instrument (Punktwert)", options = [
+     "Chart-Symbol (auto)",
+     "MNQ ($2)", "NQ ($20)",
+     "MES ($5)", "ES ($50)",
+     "MYM ($0.50)", "YM ($5)",
+     "M2K ($5)", "RTY ($50)",
+     "MGC ($10)", "GC ($100)",
+     "MCL ($100)", "CL ($1000)",
+     "Custom"], group = grpRisk, tooltip = "Wenn du z.B. den NQ-Chart anschaust aber MNQ handelst, hier MNQ wählen - die Kontraktberechnung nutzt dann dessen Punktwert statt syminfo.pointvalue.")
+pvCustom = input.float(2.0, "Custom Punktwert ($/Punkt)", minval = 0.01, step = 0.5, group = grpRisk)
 atrLen       = input.int(14, "ATR Länge", minval = 1, group = grpRisk)
 adxLen       = input.int(14, "ADX Länge", minval = 1, group = grpRisk)
 adxTrendTh   = input.float(25, "ADX Trend-Schwelle", minval = 5, group = grpRisk, tooltip = "ADX darüber = Trendmarkt: weiterer Stop, höheres R-Ziel.")
@@ -449,7 +459,21 @@ tpDist   = stopDist * rrRatio
 
 // Position sizing: risk budget / (stop distance in points * $ per point)
 riskMoney  = accountSize * riskPct / 100.0
-pointValue = syminfo.pointvalue
+pointValue = switch pvOverride
+    "MNQ ($2)"     => 2.0
+    "NQ ($20)"     => 20.0
+    "MES ($5)"     => 5.0
+    "ES ($50)"     => 50.0
+    "MYM ($0.50)"  => 0.5
+    "YM ($5)"      => 5.0
+    "M2K ($5)"     => 5.0
+    "RTY ($50)"    => 50.0
+    "MGC ($10)"    => 10.0
+    "GC ($100)"    => 100.0
+    "MCL ($100)"   => 100.0
+    "CL ($1000)"   => 1000.0
+    "Custom"       => pvCustom
+    => syminfo.pointvalue
 rawContracts = stopDist > 0 and pointValue > 0 ? math.floor(riskMoney / (stopDist * pointValue)) : 0
 contracts    = math.min(rawContracts, maxContracts)
 riskActual   = contracts * stopDist * pointValue
