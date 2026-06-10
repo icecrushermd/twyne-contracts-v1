@@ -1,5 +1,5 @@
 //@version=6
-indicator("CISD Multi-Timeframe Flow [neo|]", "CISD MTF Flow", overlay = true, max_lines_count = 200, max_labels_count = 200)
+indicator("CISD Multi-Timeframe Flow [neo|]", "CISD MTF Flow", overlay = true, max_lines_count = 200, max_labels_count = 200, dynamic_requests = true)
 
 // ============================================================================
 // INPUTS
@@ -75,6 +75,12 @@ showGapBoxes = input.bool(true, "NDOG/NWOG Boxen anzeigen", group = grpTO)
 gapSnap      = input.bool(true, "NDOG/NWOG als TP-Snap-Kandidaten", group = grpTO, tooltip = "Die Mitte des letzten New Day / New Week Opening Gap wird zusätzlich zu POC/VAH/VAL als TP-Ziel geprüft.")
 ndogColIn = input.color(color.new(color.orange, 0), "NDOG", inline = "gc", group = grpTO)
 nwogColIn = input.color(color.new(#2196f3, 0), "NWOG", inline = "gc", group = grpTO)
+
+grpOF = "Orderflow / Delta"
+deltaSrcIn = input.string("1m Up/Down (alle Pläne)", "Delta-Quelle", options = ["1m Up/Down (alle Pläne)", "Footprint Bid/Ask (Premium/Ultimate)"], group = grpOF, tooltip = "Footprint nutzt echtes Bid/Ask-Volumen pro Preislevel (request.footprint, benötigt TradingView Premium oder Ultimate). Die 1m-Variante klassifiziert 1-Minuten-Kerzen nach Schlussrichtung und funktioniert auf allen Plänen.")
+fpTicksRow = input.int(4, "Footprint: Ticks pro Row", minval = 1, group = grpOF)
+deltaFilterMode = input.string("Warnen", "Delta-Bestätigung am Entry", options = ["Aus", "Warnen", "Blocken"], group = grpOF, tooltip = "Prüft beim Signal, ob das CVD in Trade-Richtung läuft und keine frische Absorption dagegen steht. 'Warnen' markiert das Entry-Label mit Δ⚠, 'Blocken' unterdrückt das Signal.")
+showDeltaRow = input.bool(true, "Delta-Zeile im Dashboard", group = grpOF)
 
 grpQT = "Quarter Theory"
 showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
@@ -546,6 +552,64 @@ rawContracts = stopDist > 0 and pointValue > 0 ? math.floor(riskMoney / (stopDis
 contracts    = math.min(rawContracts, maxContracts)
 riskActual   = contracts * stopDist * pointValue
 
+// ============================================================================
+// ORDERFLOW / DELTA: Buy-Sell-Volumen, Session-CVD, Absorption
+// Quelle A: request.footprint (echtes Bid/Ask, Premium/Ultimate)
+// Quelle B: 1m Up/Down-Klassifikation (alle Pläne)
+// ============================================================================
+
+[ofOpens, ofCloses, ofVolumes] = request.security_lower_tf(syminfo.tickerid, "1", [open, close, volume])
+
+float upVol = 0.0
+float dnVol = 0.0
+float barDelta = na
+
+if deltaSrcIn == "Footprint Bid/Ask (Premium/Ultimate)"
+    footprint fp = request.footprint(fpTicksRow)
+    if not na(fp)
+        upVol := fp.buy_volume()
+        dnVol := fp.sell_volume()
+        barDelta := fp.delta()
+else
+    int nOf = array.size(ofCloses)
+    if nOf > 0
+        for i = 0 to nOf - 1
+            float c = array.get(ofCloses, i)
+            float o = array.get(ofOpens, i)
+            float v = nz(array.get(ofVolumes, i))
+            if c > o
+                upVol += v
+            else if c < o
+                dnVol += v
+            else
+                upVol += v / 2.0
+                dnVol += v / 2.0
+        barDelta := upVol - dnVol
+
+// Session-anchored CVD (reset at the 18:00 NY reopen)
+var float cvd = 0.0
+if f_cross(18, 0)
+    cvd := 0.0
+cvd += nz(barDelta)
+
+// Absorption: hohes Volumen + kleine Range + Aggression gegen die Schlussrichtung
+// bullAbsorb = aggressive Verkäufer werden am Level absorbiert (stützt Longs)
+// bearAbsorb = aggressive Käufer werden absorbiert (stützt Shorts)
+volSma = ta.sma(volume, 20)
+bool highVolBar = volume > volSma * 1.5
+bool smallRange = (high - low) < atrVal * 0.7
+bool bullAbsorb = highVolBar and smallRange and nz(barDelta) < 0 and close >= open
+bool bearAbsorb = highVolBar and smallRange and nz(barDelta) > 0 and close <= open
+int sinceBullAbs = nz(ta.barssince(bullAbsorb), 9999)
+int sinceBearAbs = nz(ta.barssince(bearAbsorb), 9999)
+
+// Does the orderflow (CVD direction + recent absorption) confirm a trade in
+// direction `dir` (1 = long, -1 = short)?
+f_deltaOk(int dir) =>
+    bool cvdAgrees   = dir == 1 ? cvd > 0 : cvd < 0
+    bool absAgainst  = dir == 1 ? (sinceBearAbs <= 5 and sinceBearAbs <= sinceBullAbs) : (sinceBullAbs <= 5 and sinceBullAbs <= sinceBearAbs)
+    cvdAgrees and not absAgainst
+
 // Volume profile levels (assigned in the VP section below, persisted across bars)
 var float pocPxG = na
 var float vahPxG = na
@@ -598,6 +662,15 @@ else if fvgScanDir != 0
             entryPx := (zTop + zBot) / 2.0
         fvgScanDir := 0
 
+// Orderflow confirmation: optionally warn or block when CVD/absorption
+// contradicts the signal direction.
+string deltaWarn = ""
+if sigDir != 0 and deltaFilterMode != "Aus" and not f_deltaOk(sigDir)
+    if deltaFilterMode == "Blocken"
+        sigDir := 0
+    else
+        deltaWarn := " Δ⚠"
+
 bool newSignal = sigDir != 0
 
 if newSignal
@@ -625,7 +698,7 @@ if newSignal
     entryLine := line.new(bar_index, entryPx, bar_index + lookAheadBars, entryPx, color = color.new(color.blue, 0), width = lineWidth, style = line.style_solid)
     slLine    := line.new(bar_index, slPx, bar_index + lookAheadBars, slPx, color = color.new(color.red, 0), width = lineWidth, style = line.style_dashed)
     tpLine    := line.new(bar_index, tpPx, bar_index + lookAheadBars, tpPx, color = color.new(color.green, 0), width = lineWidth, style = line.style_dashed)
-    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + (fvgEntryMode ? " (FVG)" : "") + " | " + str.tostring(contracts) + "x", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
+    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + (fvgEntryMode ? " (FVG)" : "") + " | " + str.tostring(contracts) + "x" + deltaWarn, style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
     slLbl     := label.new(bar_index + lookAheadBars, slPx, "SL " + str.tostring(slPx, format.mintick) + " (" + str.tostring(slMult, "#.#") + "×ATR)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.red, size = size.small)
     tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R" + (snapped ? ", VP-Level" : "") + ")", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
     tradeDir      := dirSign
@@ -803,13 +876,19 @@ f_structTxt(int trend, bool chU, bool chD, bool bU, bool bD) =>
 mutedCol = color.new(chart.fg_color, 45)
 
 if showTable and barstate.islast
-    var table tbl = table.new(f_tablePos(tablePosition), 4, 8, bgcolor = color.new(chart.bg_color, 15), frame_color = color.new(chart.fg_color, 60), frame_width = 1, border_width = 0)
+    int rOF   = showDeltaRow ? 6 : 5
+    int rSize = showDeltaRow ? 7 : 6
+    int rAcc  = showDeltaRow ? 8 : 7
+    int tblRows = showDeltaRow ? 9 : 8
+    var table tbl = table.new(f_tablePos(tablePosition), 4, tblRows, bgcolor = color.new(chart.bg_color, 15), frame_color = color.new(chart.fg_color, 60), frame_width = 1, border_width = 0)
     var bool tblMerged = false
     if not tblMerged
         table.merge_cells(tbl, 0, 0, 3, 0)
         table.merge_cells(tbl, 0, 5, 3, 5)
-        table.merge_cells(tbl, 0, 6, 3, 6)
-        table.merge_cells(tbl, 0, 7, 3, 7)
+        if showDeltaRow
+            table.merge_cells(tbl, 0, rOF, 3, rOF)
+        table.merge_cells(tbl, 0, rSize, 3, rSize)
+        table.merge_cells(tbl, 0, rAcc, 3, rAcc)
         tblMerged := true
 
     // Header: ticker + flow as one colored strip
@@ -843,12 +922,19 @@ if showTable and barstate.islast
     regimeCol = regimeText == "Trend" ? color.new(color.lime, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : mutedCol
     table.cell(tbl, 0, 5, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.tiny)
 
+    // Orderflow / Delta strip
+    if showDeltaRow
+        cvdCol  = cvd > 0 ? color.new(color.lime, 0) : cvd < 0 ? color.new(color.red, 0) : mutedCol
+        absTxt  = sinceBullAbs <= 3 ? "  ·  Abs▲" : sinceBearAbs <= 3 ? "  ·  Abs▼" : ""
+        ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt
+        table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.tiny)
+
     // SL/TP + contracts strip
     sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : color.new(color.lime, 0)
     microPV = pointValue / 10.0
     microQty = stopDist > 0 and microPV > 0 ? math.floor(riskMoney / (stopDist * microPV)) : 0
     sizeTxt = contracts <= 0 ? (microQty > 0 ? "0x → Micro ($" + str.tostring(microPV, "#.##") + "/Pkt): " + str.tostring(microQty) + "x" : "0x – Stop zu groß!") : str.tostring(contracts) + "x" + (rawContracts > maxContracts ? " (Cap)" : "")
-    table.cell(tbl, 0, 6, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.tiny)
+    table.cell(tbl, 0, rSize, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.tiny)
 
     // Account strip
-    table.cell(tbl, 0, 7, "$" + str.tostring(accountSize, "#,###") + "  ·  " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###") + "  ·  $" + str.tostring(pointValue, "#.##") + "/Pkt", text_color = mutedCol, text_size = size.tiny)
+    table.cell(tbl, 0, rAcc, "$" + str.tostring(accountSize, "#,###") + "  ·  " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###") + "  ·  $" + str.tostring(pointValue, "#.##") + "/Pkt", text_color = mutedCol, text_size = size.tiny)
