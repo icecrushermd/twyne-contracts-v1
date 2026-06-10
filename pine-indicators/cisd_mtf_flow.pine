@@ -35,6 +35,7 @@ showTable     = input.bool(true, "Tabelle anzeigen", group = grpTable)
 tablePosition = input.string("Top Right", "Position",
      options = ["Top Right", "Bottom Right", "Middle Right", "Bottom Center", "Middle Left"], group = grpTable)
 tableSizeOpt  = input.string("Small", "Schriftgröße", options = ["Tiny", "Small", "Normal", "Large"], group = grpTable)
+showStatsRow  = input.bool(true, "Setup-Statistik-Zeile anzeigen", group = grpTable, tooltip = "Zählt alle Setups über die geladene Chart-History: TP-Treffer, SL-Treffer, Winrate und durchschnittliches R - quasi ein eingebauter Backtest deiner aktuellen Einstellungen.")
 
 grpAlert = "Flow Alerts"
 alertOnFlowChange = input.bool(false, "Alert bei Wechsel zu Longflow / Shortflow", group = grpAlert)
@@ -65,6 +66,8 @@ showTradeLevels = input.bool(true, "Entry/SL/TP Linien bei LTF-Flip zeichnen", g
 tradeTimeoutBars = input.int(90, "Setup-Timeout (Bars)", minval = 10, group = grpRisk, tooltip = "Nach so vielen Bars ohne SL/TP-Treffer wird das Setup als abgelaufen markiert.")
 fvgEntryMode = input.bool(true, "Entry am ersten FVG nach Flip", group = grpRisk, tooltip = "Statt sofort beim LTF-Flip einzusteigen, wird auf das erste Fair Value Gap in Trade-Richtung gewartet - dessen Mitte wird zum Entry, das FVG wird als Entry-Zone eingezeichnet.")
 fvgScanBars  = input.int(30, "FVG-Suchfenster (Bars)", minval = 3, group = grpRisk, tooltip = "Erscheint innerhalb dieses Fensters kein FVG in Trade-Richtung, verfällt das Signal.")
+beHint    = input.bool(true, "Break-Even-Hinweis bei 1R Gewinn", group = grpRisk, tooltip = "Sobald ein laufendes Setup 1R im Gewinn war, wird die Entry-Linie türkis und das Label mit [BE möglich] markiert - Erinnerung, den Stop auf Einstand zu ziehen.")
+showScore = input.bool(true, "Confluence-Score im Entry-Label", group = grpRisk, tooltip = "Bewertet jedes Signal mit 0-7 Punkten: HTF-Flow, MTF-Struktur, CVD, Absorption, Killzone, Quarter Q2/Q3, Entry nahe Volumen-/Gap-Level.")
 
 grpTO = "True Opens & Opening Gaps"
 showTDOln  = input.bool(true, "True Day Open (00:00 NY)", inline = "tdo", group = grpTO)
@@ -81,6 +84,13 @@ deltaSrcIn = input.string("1m Up/Down (alle Pläne)", "Delta-Quelle", options = 
 fpTicksRow = input.int(4, "Footprint: Ticks pro Row", minval = 1, group = grpOF)
 deltaFilterMode = input.string("Warnen", "Delta-Bestätigung am Entry", options = ["Aus", "Warnen", "Blocken"], group = grpOF, tooltip = "Prüft beim Signal, ob das CVD in Trade-Richtung läuft und keine frische Absorption dagegen steht. 'Warnen' markiert das Entry-Label mit Δ⚠, 'Blocken' unterdrückt das Signal.")
 showDeltaRow = input.bool(true, "Delta-Zeile im Dashboard", group = grpOF)
+showCvdDiv = input.bool(true, "CVD-Divergenz Marker (◆)", group = grpOF, tooltip = "Markiert Pivot-Hochs/-Tiefs, an denen der Preis ein neues Extrem macht, das Session-CVD aber nicht mitzieht - klassisches Erschöpfungssignal.")
+
+grpKZ = "Killzones / Sessions (NY-Zeit)"
+kzFilterMode = input.string("Warnen", "Signal-Filter", options = ["Aus", "Warnen", "Blocken"], group = grpKZ, tooltip = "Prüft beim Signal, ob es in einer aktiven Killzone entsteht. 'Warnen' markiert das Entry-Label mit KZ⚠, 'Blocken' unterdrückt Signale außerhalb der Killzones komplett.")
+kzLondon = input.bool(true, "London Open (02:00–05:00)", group = grpKZ)
+kzNYAM   = input.bool(true, "NY AM (09:30–12:00)", group = grpKZ)
+kzNYPM   = input.bool(true, "NY PM (13:30–16:00)", group = grpKZ)
 
 grpQT = "Quarter Theory"
 showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
@@ -553,6 +563,33 @@ contracts    = math.min(rawContracts, maxContracts)
 riskActual   = contracts * stopDist * pointValue
 
 // ============================================================================
+// QUARTER THEORY: deterministic NY-time quarter slots
+// 90m: anchored 19:00 NY (Q1-Q4 per session) | 6H: anchored 18:00 NY
+// Daily: Sun-Wed = Q1-Q4 (CME week)          | Weekly: week of month
+// ============================================================================
+
+t1900  = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 19, 0)
+base90 = time >= t1900 ? t1900 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 19, 0)
+slot90 = int(math.floor((time - base90) / 5400000))
+q90    = slot90 >= 0 and slot90 < 16 ? slot90 % 4 + 1 : 0
+key90  = base90 + slot90 * 5400000
+
+t1800 = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 18, 0)
+base6 = time >= t1800 ? t1800 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 18, 0)
+slot6 = math.max(0, math.min(int(math.floor((time - base6) / 21600000)), 3))
+q6    = slot6 + 1
+key6  = base6 + slot6 * 21600000
+
+dowNY = dayofweek(time, TZ)
+qD = dowNY == dayofweek.sunday ? 1 : dowNY == dayofweek.monday ? 2 : dowNY == dayofweek.tuesday ? 3 : dowNY == dayofweek.wednesday ? 4 : 0
+nyDayKey = year(time, TZ) * 10000 + month(time, TZ) * 100 + dayofmonth(time, TZ)
+
+qW = math.min(int(math.floor((dayofmonth(time, TZ) - 1) / 7)) + 1, 4)
+keyW = year(time, TZ) * 1000 + month(time, TZ) * 10 + qW
+
+f_qTxt(int q) => q > 0 ? "Q" + str.tostring(q) : "–"
+
+// ============================================================================
 // ORDERFLOW / DELTA: Buy-Sell-Volumen, Session-CVD, Absorption
 // Quelle A: request.footprint (echtes Bid/Ask, Premium/Ultimate)
 // Quelle B: 1m Up/Down-Klassifikation (alle Pläne)
@@ -610,6 +647,36 @@ f_deltaOk(int dir) =>
     bool absAgainst  = dir == 1 ? (sinceBearAbs <= 5 and sinceBearAbs <= sinceBullAbs) : (sinceBullAbs <= 5 and sinceBullAbs <= sinceBearAbs)
     cvdAgrees and not absAgainst
 
+// Killzones: is the current bar inside an enabled NY session window?
+int nyMin = hour(time, TZ) * 60 + minute(time, TZ)
+bool inKZ = (kzLondon and nyMin >= 120 and nyMin < 300) or (kzNYAM and nyMin >= 570 and nyMin < 720) or (kzNYPM and nyMin >= 810 and nyMin < 960)
+
+// CVD-Divergenz: Preis macht ein höheres Pivot-Hoch, das Session-CVD aber
+// nicht (bearish) - bzw. tieferes Pivot-Tief ohne neues CVD-Tief (bullish).
+float divPH = ta.pivothigh(high, pivLeft, pivRight)
+float divPL = ta.pivotlow(low, pivLeft, pivRight)
+var float lastDivPH    = na
+var float lastDivPHcvd = na
+var float lastDivPL    = na
+var float lastDivPLcvd = na
+bool bearDiv = false
+bool bullDiv = false
+if not na(divPH)
+    float cvdAtPH = cvd[pivRight]
+    if not na(lastDivPH) and divPH > lastDivPH and cvdAtPH < lastDivPHcvd
+        bearDiv := true
+    lastDivPH    := divPH
+    lastDivPHcvd := cvdAtPH
+if not na(divPL)
+    float cvdAtPL = cvd[pivRight]
+    if not na(lastDivPL) and divPL < lastDivPL and cvdAtPL > lastDivPLcvd
+        bullDiv := true
+    lastDivPL    := divPL
+    lastDivPLcvd := cvdAtPL
+
+plotshape(showCvdDiv and bearDiv, "CVD Divergenz Bear", style = shape.diamond, location = location.abovebar, color = color.new(color.fuchsia, 0), size = size.tiny, offset = -pivRight)
+plotshape(showCvdDiv and bullDiv, "CVD Divergenz Bull", style = shape.diamond, location = location.belowbar, color = color.new(color.aqua, 0), size = size.tiny, offset = -pivRight)
+
 // Volume profile levels (assigned in the VP section below, persisted across bars)
 var float pocPxG = na
 var float vahPxG = na
@@ -628,6 +695,15 @@ var int   tradeDir      = 0
 var float tradeSL       = na
 var float tradeTP       = na
 var int   tradeStartBar = na
+var float tradeEntry    = na
+var float tradeR        = na
+var bool  beFlagged     = false
+
+// Setup statistics across the loaded chart history
+var int   statWins  = 0
+var int   statLoss  = 0
+var int   statOther = 0
+var float statSumR  = 0.0
 
 // Optional FVG entry: after a flip, wait for the first fair value gap in trade
 // direction and enter at its midpoint instead of the flip close.
@@ -671,6 +747,13 @@ if sigDir != 0 and deltaFilterMode != "Aus" and not f_deltaOk(sigDir)
     else
         deltaWarn := " Δ⚠"
 
+// Killzone confirmation: warn or block signals outside the enabled sessions.
+if sigDir != 0 and kzFilterMode != "Aus" and not inKZ
+    if kzFilterMode == "Blocken"
+        sigDir := 0
+    else
+        deltaWarn += " KZ⚠"
+
 bool newSignal = sigDir != 0
 
 if newSignal
@@ -692,20 +775,46 @@ if newSignal
                         tpPx := lvl
                         snapped := true
     rrEff = stopDist > 0 ? math.abs(tpPx - entryPx) / stopDist : rrRatio
+    // Confluence score (0-7): how many independent factors back this signal?
+    int score = 0
+    score += htfCISD == dirSign ? 1 : 0
+    score += mtfTrend == dirSign ? 1 : 0
+    score += (dirSign == 1 ? cvd > 0 : cvd < 0) ? 1 : 0
+    score += (dirSign == 1 ? sinceBullAbs <= 10 : sinceBearAbs <= 10) ? 1 : 0
+    score += inKZ ? 1 : 0
+    score += (q90 == 2 or q90 == 3) ? 1 : 0
+    float[] cfLvls = array.from(pocPxG, vahPxG, valPxG, ndogMid, nwogMid)
+    float minLvlDist = na
+    for i = 0 to 4
+        float l = array.get(cfLvls, i)
+        if not na(l)
+            float d = math.abs(entryPx - l)
+            if na(minLvlDist) or d < minLvlDist
+                minLvlDist := d
+    score += not na(minLvlDist) and minLvlDist <= atrVal * 0.5 ? 1 : 0
+    string scoreTxt = showScore ? "  ·  Score " + str.tostring(score) + "/7" : ""
     line.delete(entryLine), label.delete(entryLbl)
     line.delete(slLine),    label.delete(slLbl)
     line.delete(tpLine),    label.delete(tpLbl)
     entryLine := line.new(bar_index, entryPx, bar_index + lookAheadBars, entryPx, color = color.new(color.blue, 0), width = lineWidth, style = line.style_solid)
     slLine    := line.new(bar_index, slPx, bar_index + lookAheadBars, slPx, color = color.new(color.red, 0), width = lineWidth, style = line.style_dashed)
     tpLine    := line.new(bar_index, tpPx, bar_index + lookAheadBars, tpPx, color = color.new(color.green, 0), width = lineWidth, style = line.style_dashed)
-    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + (fvgEntryMode ? " (FVG)" : "") + " | " + str.tostring(contracts) + "x" + deltaWarn, style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
+    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + (fvgEntryMode ? " (FVG)" : "") + " | " + str.tostring(contracts) + "x" + scoreTxt + deltaWarn, style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
     slLbl     := label.new(bar_index + lookAheadBars, slPx, "SL " + str.tostring(slPx, format.mintick) + " (" + str.tostring(slMult, "#.#") + "×ATR)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.red, size = size.small)
     tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R" + (snapped ? ", VP-Level" : "") + ")", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
     tradeDir      := dirSign
     tradeSL       := slPx
     tradeTP       := tpPx
     tradeStartBar := bar_index
+    tradeEntry    := entryPx
+    tradeR        := math.abs(entryPx - slPx)
+    beFlagged     := false
 else if tradeDir != 0
+    // Break-even hint: once the setup has been 1R in profit, suggest moving SL
+    if beHint and not beFlagged and tradeR > 0 and ((tradeDir == 1 and high >= tradeEntry + tradeR) or (tradeDir == -1 and low <= tradeEntry - tradeR))
+        beFlagged := true
+        line.set_color(entryLine, color.new(color.teal, 0))
+        label.set_text(entryLbl, label.get_text(entryLbl) + "  [BE möglich]")
     string endStatus = na
     if (tradeDir == 1 and low <= tradeSL) or (tradeDir == -1 and high >= tradeSL)
         endStatus := "SL hit"
@@ -720,6 +829,16 @@ else if tradeDir != 0
         line.set_color(entryLine, grayCol), line.set_color(slLine, grayCol), line.set_color(tpLine, grayCol)
         label.set_textcolor(entryLbl, grayCol), label.set_textcolor(slLbl, grayCol), label.set_textcolor(tpLbl, grayCol)
         label.set_text(entryLbl, label.get_text(entryLbl) + "  [" + endStatus + "]")
+        // Statistics: TP = full target R, SL = -1R, otherwise mark-to-market R
+        if tradeR > 0
+            float closedR = endStatus == "TP hit ✓" ? math.abs(tradeTP - tradeEntry) / tradeR : endStatus == "SL hit" ? -1.0 : (close - tradeEntry) * tradeDir / tradeR
+            statSumR += closedR
+        if endStatus == "TP hit ✓"
+            statWins += 1
+        else if endStatus == "SL hit"
+            statLoss += 1
+        else
+            statOther += 1
         tradeDir := 0
 
 if not na(entryLine) and tradeDir != 0
@@ -728,33 +847,6 @@ if not na(entryLine) and tradeDir != 0
     line.set_x2(tpLine, bar_index + lookAheadBars),    label.set_x(tpLbl, bar_index + lookAheadBars)
     if not na(entryZone)
         box.set_right(entryZone, bar_index + lookAheadBars)
-
-// ============================================================================
-// QUARTER THEORY: deterministic NY-time quarter slots
-// 90m: anchored 19:00 NY (Q1-Q4 per session) | 6H: anchored 18:00 NY
-// Daily: Sun-Wed = Q1-Q4 (CME week)          | Weekly: week of month
-// ============================================================================
-
-t1900  = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 19, 0)
-base90 = time >= t1900 ? t1900 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 19, 0)
-slot90 = int(math.floor((time - base90) / 5400000))
-q90    = slot90 >= 0 and slot90 < 16 ? slot90 % 4 + 1 : 0
-key90  = base90 + slot90 * 5400000
-
-t1800 = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 18, 0)
-base6 = time >= t1800 ? t1800 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 18, 0)
-slot6 = math.max(0, math.min(int(math.floor((time - base6) / 21600000)), 3))
-q6    = slot6 + 1
-key6  = base6 + slot6 * 21600000
-
-dowNY = dayofweek(time, TZ)
-qD = dowNY == dayofweek.sunday ? 1 : dowNY == dayofweek.monday ? 2 : dowNY == dayofweek.tuesday ? 3 : dowNY == dayofweek.wednesday ? 4 : 0
-nyDayKey = year(time, TZ) * 10000 + month(time, TZ) * 100 + dayofmonth(time, TZ)
-
-qW = math.min(int(math.floor((dayofmonth(time, TZ) - 1) / 7)) + 1, 4)
-keyW = year(time, TZ) * 1000 + month(time, TZ) * 10 + qW
-
-f_qTxt(int q) => q > 0 ? "Q" + str.tostring(q) : "–"
 
 // ============================================================================
 // QUARTER VOLUME PROFILE: POC / VAH / VAL of the current quarter
@@ -876,10 +968,16 @@ f_structTxt(int trend, bool chU, bool chD, bool bU, bool bD) =>
 mutedCol = color.new(chart.fg_color, 45)
 
 if showTable and barstate.islast
-    int rOF   = showDeltaRow ? 6 : 5
-    int rSize = showDeltaRow ? 7 : 6
-    int rAcc  = showDeltaRow ? 8 : 7
-    int tblRows = showDeltaRow ? 9 : 8
+    int rNext = 6
+    int rOF = rNext
+    if showDeltaRow
+        rNext += 1
+    int rStat = rNext
+    if showStatsRow
+        rNext += 1
+    int rSize = rNext
+    int rAcc  = rNext + 1
+    int tblRows = rNext + 2
     var table tbl = table.new(f_tablePos(tablePosition), 4, tblRows, bgcolor = color.new(chart.bg_color, 15), frame_color = color.new(chart.fg_color, 60), frame_width = 1, border_width = 0)
     var bool tblMerged = false
     if not tblMerged
@@ -887,6 +985,8 @@ if showTable and barstate.islast
         table.merge_cells(tbl, 0, 5, 3, 5)
         if showDeltaRow
             table.merge_cells(tbl, 0, rOF, 3, rOF)
+        if showStatsRow
+            table.merge_cells(tbl, 0, rStat, 3, rStat)
         table.merge_cells(tbl, 0, rSize, 3, rSize)
         table.merge_cells(tbl, 0, rAcc, 3, rAcc)
         tblMerged := true
@@ -928,6 +1028,15 @@ if showTable and barstate.islast
         absTxt  = sinceBullAbs <= 3 ? "  ·  Abs▲" : sinceBearAbs <= 3 ? "  ·  Abs▼" : ""
         ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt
         table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.tiny)
+
+    // Setup statistics strip (running backtest of current settings)
+    if showStatsRow
+        int statTotal = statWins + statLoss + statOther
+        float avgR = statTotal > 0 ? statSumR / statTotal : na
+        float winPct = statWins + statLoss > 0 ? 100.0 * statWins / (statWins + statLoss) : na
+        statCol = na(avgR) ? mutedCol : avgR >= 0 ? color.new(color.lime, 0) : color.new(color.red, 0)
+        statTxt = statTotal == 0 ? "Setups: –" : "Setups " + str.tostring(statTotal) + "  ·  ✓" + str.tostring(statWins) + " ✗" + str.tostring(statLoss) + "  ·  Win " + (na(winPct) ? "–" : str.tostring(winPct, "#") + "%") + "  ·  Ø " + (avgR >= 0 ? "+" : "") + str.tostring(avgR, "#.##") + "R"
+        table.cell(tbl, 0, rStat, statTxt, text_color = statCol, text_size = size.tiny)
 
     // SL/TP + contracts strip
     sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : color.new(color.lime, 0)
