@@ -63,6 +63,18 @@ rrChop       = input.float(1.5, "TP (R) im Chop", minval = 0.5, step = 0.25, gro
 rrTrend      = input.float(3.0, "TP (R) im Trend", minval = 0.5, step = 0.25, group = grpRisk)
 showTradeLevels = input.bool(true, "Entry/SL/TP Linien bei LTF-Flip zeichnen", group = grpRisk)
 tradeTimeoutBars = input.int(90, "Setup-Timeout (Bars)", minval = 10, group = grpRisk, tooltip = "Nach so vielen Bars ohne SL/TP-Treffer wird das Setup als abgelaufen markiert.")
+fvgEntryMode = input.bool(true, "Entry am ersten FVG nach Flip", group = grpRisk, tooltip = "Statt sofort beim LTF-Flip einzusteigen, wird auf das erste Fair Value Gap in Trade-Richtung gewartet - dessen Mitte wird zum Entry, das FVG wird als Entry-Zone eingezeichnet.")
+fvgScanBars  = input.int(30, "FVG-Suchfenster (Bars)", minval = 3, group = grpRisk, tooltip = "Erscheint innerhalb dieses Fensters kein FVG in Trade-Richtung, verfällt das Signal.")
+
+grpTO = "True Opens & Opening Gaps"
+showTDOln  = input.bool(true, "True Day Open (00:00 NY)", inline = "tdo", group = grpTO)
+colTDOln   = input.color(color.new(#5252ff, 0), "", inline = "tdo", group = grpTO)
+showNYAMln = input.bool(true, "NY AM Open (09:30 NY)", inline = "nyam", group = grpTO)
+colNYAMln  = input.color(color.new(#f44336, 0), "", inline = "nyam", group = grpTO)
+showGapBoxes = input.bool(true, "NDOG/NWOG Boxen anzeigen", group = grpTO)
+gapSnap      = input.bool(true, "NDOG/NWOG als TP-Snap-Kandidaten", group = grpTO, tooltip = "Die Mitte des letzten New Day / New Week Opening Gap wird zusätzlich zu POC/VAH/VAL als TP-Ziel geprüft.")
+ndogColIn = input.color(color.new(color.orange, 0), "NDOG", inline = "gc", group = grpTO)
+nwogColIn = input.color(color.new(#2196f3, 0), "NWOG", inline = "gc", group = grpTO)
 
 grpQT = "Quarter Theory"
 showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
@@ -78,6 +90,12 @@ tpSnap      = input.bool(true, "TP an POC/VAH/VAL snappen (Confluence)", group =
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+const string TZ = "America/New_York"
+
+f_cross(int hh, int mm) =>
+    int t = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), hh, mm)
+    time >= t and nz(time[1], time - 1) < t
 
 lineStyle = styleOption == "Dotted (┈)" ? line.style_dotted : styleOption == "Dashed (╌)" ? line.style_dashed : line.style_solid
 
@@ -442,6 +460,54 @@ if alertOnLTFFlip and (ltfFlipToLong or ltfFlipToShort)
     alert("LTF CISD Flip in Trendrichtung (" + (ltfFlipToLong ? "Long" : "Short") + ") - " + syminfo.ticker, alert.freq_once_per_bar_close)
 
 // ============================================================================
+// TRUE OPENS (TDO 00:00 / NYAM 09:30 NY) + NDOG/NWOG opening gaps
+// ============================================================================
+
+var line  tdoLine = na
+var label tdoLbl  = na
+if showTDOln and f_cross(0, 0)
+    line.delete(tdoLine), label.delete(tdoLbl)
+    tdoLine := line.new(bar_index, open, bar_index + lookAheadBars, open, color = colTDOln, style = line.style_dotted)
+    tdoLbl  := label.new(bar_index + lookAheadBars, open, "TDO", style = label.style_label_left, color = color.new(color.white, 100), textcolor = colTDOln, size = size.tiny)
+if not na(tdoLine)
+    line.set_x2(tdoLine, bar_index + lookAheadBars), label.set_x(tdoLbl, bar_index + lookAheadBars)
+
+var line  nyamLine = na
+var label nyamLbl  = na
+if showNYAMln and f_cross(9, 30)
+    line.delete(nyamLine), label.delete(nyamLbl)
+    nyamLine := line.new(bar_index, open, bar_index + lookAheadBars, open, color = colNYAMln, style = line.style_dotted)
+    nyamLbl  := label.new(bar_index + lookAheadBars, open, "NYAM", style = label.style_label_left, color = color.new(color.white, 100), textcolor = colNYAMln, size = size.tiny)
+if not na(nyamLine)
+    line.set_x2(nyamLine, bar_index + lookAheadBars), label.set_x(nyamLbl, bar_index + lookAheadBars)
+
+// Opening gaps at the 18:00 NY futures reopen: Sunday = NWOG, Mon-Thu = NDOG.
+// Only the most recent gap of each type is kept (the classic draw-on-liquidity target).
+var box   ndogBox = na
+var box   nwogBox = na
+var float ndogMid = na
+var float nwogMid = na
+
+if f_cross(18, 0) and not na(close[1]) and open != close[1]
+    float gTop = math.max(open, close[1])
+    float gBot = math.min(open, close[1])
+    if dayofweek(time, TZ) == dayofweek.sunday
+        nwogMid := (gTop + gBot) / 2.0
+        box.delete(nwogBox)
+        if showGapBoxes
+            nwogBox := box.new(bar_index, gTop, bar_index + lookAheadBars, gBot, bgcolor = color.new(nwogColIn, 88), border_color = color.new(nwogColIn, 40), border_style = line.style_dotted, text = "NWOG", text_size = size.tiny, text_color = color.new(nwogColIn, 30), text_halign = text.align_right)
+    else if dayofweek(time, TZ) >= dayofweek.monday and dayofweek(time, TZ) <= dayofweek.thursday
+        ndogMid := (gTop + gBot) / 2.0
+        box.delete(ndogBox)
+        if showGapBoxes
+            ndogBox := box.new(bar_index, gTop, bar_index + lookAheadBars, gBot, bgcolor = color.new(ndogColIn, 88), border_color = color.new(ndogColIn, 40), border_style = line.style_dotted, text = "NDOG", text_size = size.tiny, text_color = color.new(ndogColIn, 30), text_halign = text.align_right)
+
+if not na(ndogBox)
+    box.set_right(ndogBox, bar_index + lookAheadBars)
+if not na(nwogBox)
+    box.set_right(nwogBox, bar_index + lookAheadBars)
+
+// ============================================================================
 // RISK MODULE: ATR/ADX-adaptive SL/TP + position sizing
 // ============================================================================
 
@@ -499,18 +565,50 @@ var float tradeSL       = na
 var float tradeTP       = na
 var int   tradeStartBar = na
 
-bool newSignal = showTradeLevels and (ltfFlipToLong or ltfFlipToShort) and contracts > 0
+// Optional FVG entry: after a flip, wait for the first fair value gap in trade
+// direction and enter at its midpoint instead of the flip close.
+var int fvgScanDir   = 0
+var int fvgScanStart = na
+var box entryZone    = na
+
+bool flipSignal = showTradeLevels and (ltfFlipToLong or ltfFlipToShort)
+bool bullFvgNow = low > high[2]
+bool bearFvgNow = high < low[2]
+
+int   sigDir  = 0
+float entryPx = na
+
+if flipSignal
+    if fvgEntryMode
+        fvgScanDir   := ltfFlipToLong ? 1 : -1
+        fvgScanStart := bar_index
+    else if contracts > 0
+        sigDir  := ltfFlipToLong ? 1 : -1
+        entryPx := close
+else if fvgScanDir != 0
+    if curFlow != fvgScanDir or bar_index - fvgScanStart > fvgScanBars
+        fvgScanDir := 0
+    else if (fvgScanDir == 1 and bullFvgNow) or (fvgScanDir == -1 and bearFvgNow)
+        float zTop = fvgScanDir == 1 ? low : low[2]
+        float zBot = fvgScanDir == 1 ? high[2] : high
+        box.delete(entryZone)
+        entryZone := box.new(bar_index - 2, zTop, bar_index + lookAheadBars, zBot, bgcolor = color.new(color.blue, 88), border_color = color.new(color.blue, 45), border_style = line.style_dotted, text = "FVG Entry", text_size = size.tiny, text_color = color.new(color.blue, 30), text_halign = text.align_right)
+        if contracts > 0
+            sigDir  := fvgScanDir
+            entryPx := (zTop + zBot) / 2.0
+        fvgScanDir := 0
+
+bool newSignal = sigDir != 0
 
 if newSignal
-    dirSign  = ltfFlipToLong ? 1 : -1
-    entryPx  = close
+    dirSign  = sigDir
     slPx     = entryPx - dirSign * stopDist
     tpPx     = entryPx + dirSign * tpDist
     bool snapped = false
     if tpSnap
-        float[] vpLvls = array.from(pocPxG, vahPxG, valPxG)
+        float[] vpLvls = array.from(pocPxG, vahPxG, valPxG, gapSnap ? ndogMid : na, gapSnap ? nwogMid : na)
         float bestDiff = -1.0
-        for i = 0 to 2
+        for i = 0 to 4
             float lvl = array.get(vpLvls, i)
             if not na(lvl)
                 float dist = (lvl - entryPx) * dirSign
@@ -527,7 +625,7 @@ if newSignal
     entryLine := line.new(bar_index, entryPx, bar_index + lookAheadBars, entryPx, color = color.new(color.blue, 0), width = lineWidth, style = line.style_solid)
     slLine    := line.new(bar_index, slPx, bar_index + lookAheadBars, slPx, color = color.new(color.red, 0), width = lineWidth, style = line.style_dashed)
     tpLine    := line.new(bar_index, tpPx, bar_index + lookAheadBars, tpPx, color = color.new(color.green, 0), width = lineWidth, style = line.style_dashed)
-    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + " | " + str.tostring(contracts) + "x", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
+    entryLbl  := label.new(bar_index + lookAheadBars, entryPx, "Entry " + str.tostring(entryPx, format.mintick) + (fvgEntryMode ? " (FVG)" : "") + " | " + str.tostring(contracts) + "x", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.blue, size = size.small)
     slLbl     := label.new(bar_index + lookAheadBars, slPx, "SL " + str.tostring(slPx, format.mintick) + " (" + str.tostring(slMult, "#.#") + "×ATR)", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.red, size = size.small)
     tpLbl     := label.new(bar_index + lookAheadBars, tpPx, "TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R" + (snapped ? ", VP-Level" : "") + ")", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.green, size = size.small)
     tradeDir      := dirSign
@@ -555,14 +653,14 @@ if not na(entryLine) and tradeDir != 0
     line.set_x2(entryLine, bar_index + lookAheadBars), label.set_x(entryLbl, bar_index + lookAheadBars)
     line.set_x2(slLine, bar_index + lookAheadBars),    label.set_x(slLbl, bar_index + lookAheadBars)
     line.set_x2(tpLine, bar_index + lookAheadBars),    label.set_x(tpLbl, bar_index + lookAheadBars)
+    if not na(entryZone)
+        box.set_right(entryZone, bar_index + lookAheadBars)
 
 // ============================================================================
 // QUARTER THEORY: deterministic NY-time quarter slots
 // 90m: anchored 19:00 NY (Q1-Q4 per session) | 6H: anchored 18:00 NY
 // Daily: Sun-Wed = Q1-Q4 (CME week)          | Weekly: week of month
 // ============================================================================
-
-const string TZ = "America/New_York"
 
 t1900  = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 19, 0)
 base90 = time >= t1900 ? t1900 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 19, 0)
