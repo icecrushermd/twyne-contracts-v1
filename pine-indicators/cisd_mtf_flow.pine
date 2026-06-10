@@ -1018,7 +1018,7 @@ if showVP
         // could hold resting limit liquidity / act as support-resistance.
         while array.size(hvnLines) > 0
             line.delete(array.pop(hvnLines))
-        if showHVN
+        if showHVN and sz >= 3
             float hvnTarget = pocV * hvnThresh / 100.0
             for i = 1 to sz - 2
                 if (i < lo or i > hi) and i != pocOff
