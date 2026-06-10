@@ -34,7 +34,7 @@ grpTable = "Tabelle"
 showTable     = input.bool(true, "Tabelle anzeigen", group = grpTable)
 tablePosition = input.string("Top Right", "Position",
      options = ["Top Right", "Bottom Right", "Middle Right", "Bottom Center", "Middle Left"], group = grpTable)
-tableSizeOpt  = input.string("Normal", "Schriftgröße", options = ["Tiny", "Small", "Normal", "Large"], group = grpTable)
+tableSizeOpt  = input.string("Small", "Schriftgröße", options = ["Tiny", "Small", "Normal", "Large"], group = grpTable)
 
 grpAlert = "Flow Alerts"
 alertOnFlowChange = input.bool(false, "Alert bei Wechsel zu Longflow / Shortflow", group = grpAlert)
@@ -52,6 +52,16 @@ slMultBase   = input.float(1.5, "SL = ATR ×", minval = 0.3, step = 0.1, group =
 rrChop       = input.float(1.5, "TP (R) im Chop", minval = 0.5, step = 0.25, group = grpRisk)
 rrTrend      = input.float(3.0, "TP (R) im Trend", minval = 0.5, step = 0.25, group = grpRisk)
 showTradeLevels = input.bool(true, "Entry/SL/TP Linien bei LTF-Flip zeichnen", group = grpRisk)
+
+grpQT = "Quarter Theory"
+showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
+
+grpVP = "Quarter Volumenprofil"
+showVP      = input.bool(true, "POC/VAH/VAL des aktuellen Quarters", group = grpVP)
+vpCycle     = input.string("6H", "Profil-Zyklus", options = ["90m", "6H", "Daily", "Weekly"], group = grpVP)
+vpValueArea = input.float(70, "Value Area %", minval = 50, maxval = 95, group = grpVP)
+vpPocColor  = input.color(color.new(color.orange, 0), "POC", inline = "vpc", group = grpVP)
+vpVaColor   = input.color(color.new(color.gray, 40), "VAH/VAL", inline = "vpc", group = grpVP)
 
 // ============================================================================
 // HELPERS
@@ -473,62 +483,184 @@ if not na(entryLine)
     line.set_x2(tpLine, bar_index + lookAheadBars),    label.set_x(tpLbl, bar_index + lookAheadBars)
 
 // ============================================================================
-// TABLE
+// QUARTER THEORY: deterministic NY-time quarter slots
+// 90m: anchored 19:00 NY (Q1-Q4 per session) | 6H: anchored 18:00 NY
+// Daily: Sun-Wed = Q1-Q4 (CME week)          | Weekly: week of month
 // ============================================================================
 
-f_cisdLabel(state) =>
-    state == 1 ? "Bullish" : state == -1 ? "Bearish" : "—"
+const string TZ = "America/New_York"
 
-f_cisdColor(state) =>
-    state == 1 ? color.new(color.green, 70) : state == -1 ? color.new(color.red, 70) : color.new(color.gray, 85)
+t1900  = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 19, 0)
+base90 = time >= t1900 ? t1900 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 19, 0)
+slot90 = int(math.floor((time - base90) / 5400000))
+q90    = slot90 >= 0 and slot90 < 16 ? slot90 % 4 + 1 : 0
+key90  = base90 + slot90 * 5400000
 
-f_structLabel(trend, chU, chD, bU, bD) =>
-    base = trend == 1 ? "Bullish" : trend == -1 ? "Bearish" : "—"
-    chU ? base + " (CHoCH▲)" : chD ? base + " (CHoCH▼)" : bU ? base + " (BOS▲)" : bD ? base + " (BOS▼)" : base
+t1800 = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 18, 0)
+base6 = time >= t1800 ? t1800 : timestamp(TZ, year(time - 86400000, TZ), month(time - 86400000, TZ), dayofmonth(time - 86400000, TZ), 18, 0)
+slot6 = math.max(0, math.min(int(math.floor((time - base6) / 21600000)), 3))
+q6    = slot6 + 1
+key6  = base6 + slot6 * 21600000
 
-f_structColor(trend) =>
-    trend == 1 ? color.new(color.green, 70) : trend == -1 ? color.new(color.red, 70) : color.new(color.gray, 85)
+dowNY = dayofweek(time, TZ)
+qD = dowNY == dayofweek.sunday ? 1 : dowNY == dayofweek.monday ? 2 : dowNY == dayofweek.tuesday ? 3 : dowNY == dayofweek.wednesday ? 4 : 0
+nyDayKey = year(time, TZ) * 10000 + month(time, TZ) * 100 + dayofmonth(time, TZ)
+
+qW = math.min(int(math.floor((dayofmonth(time, TZ) - 1) / 7)) + 1, 4)
+keyW = year(time, TZ) * 1000 + month(time, TZ) * 10 + qW
+
+f_qTxt(int q) => q > 0 ? "Q" + str.tostring(q) : "–"
+
+// ============================================================================
+// QUARTER VOLUME PROFILE: POC / VAH / VAL of the current quarter
+// 1m volume is bucketed into price bins (bin size fixed at quarter start),
+// POC = max-volume bin, VA expands from POC until vpValueArea% is covered.
+// ============================================================================
+
+[vpCloses, vpVolumes] = request.security_lower_tf(syminfo.tickerid, "1", [close, volume])
+
+int vpKey = vpCycle == "90m" ? key90 : vpCycle == "6H" ? key6 : vpCycle == "Daily" ? nyDayKey : keyW
+
+var float[] vpVols  = array.new_float()
+var int   vpBase    = na
+var float vpStep    = na
+var int   vpStartT  = na
+var int   vpLastKey = na
+
+var line  pocLine = na
+var line  vahLine = na
+var line  valLine = na
+var label pocLbl  = na
+
+if showVP
+    if na(vpLastKey) or vpKey != vpLastKey
+        vpLastKey := vpKey
+        array.clear(vpVols)
+        vpBase   := na
+        vpStep   := math.max(nz(atrVal, syminfo.mintick * 10) / 4.0, syminfo.mintick)
+        vpStartT := time
+
+    int nSub = array.size(vpCloses)
+    if nSub > 0 and not na(vpStep)
+        for i = 0 to nSub - 1
+            float c = array.get(vpCloses, i)
+            float v = nz(array.get(vpVolumes, i))
+            int idx = int(math.round(c / vpStep))
+            if na(vpBase)
+                vpBase := idx
+                array.push(vpVols, v)
+            else
+                while idx < vpBase and array.size(vpVols) < 4000
+                    array.unshift(vpVols, 0.0)
+                    vpBase := vpBase - 1
+                while idx > vpBase + array.size(vpVols) - 1 and array.size(vpVols) < 4000
+                    array.push(vpVols, 0.0)
+                int off = idx - vpBase
+                if off >= 0 and off < array.size(vpVols)
+                    array.set(vpVols, off, array.get(vpVols, off) + v)
+
+    int sz = array.size(vpVols)
+    if sz > 0
+        int pocOff = 0
+        float pocV = -1.0
+        float totV = 0.0
+        for i = 0 to sz - 1
+            float v = array.get(vpVols, i)
+            totV += v
+            if v > pocV
+                pocV := v
+                pocOff := i
+        float vaTarget = totV * vpValueArea / 100.0
+        float vaAcc = pocV
+        int lo = pocOff
+        int hi = pocOff
+        while vaAcc < vaTarget and (lo > 0 or hi < sz - 1)
+            float vLo = lo > 0 ? array.get(vpVols, lo - 1) : -1.0
+            float vHi = hi < sz - 1 ? array.get(vpVols, hi + 1) : -1.0
+            if vHi >= vLo
+                hi += 1
+                vaAcc += math.max(vHi, 0.0)
+            else
+                lo -= 1
+                vaAcc += math.max(vLo, 0.0)
+        float pocPx = (vpBase + pocOff) * vpStep
+        float vahPx = (vpBase + hi) * vpStep
+        float valPx = (vpBase + lo) * vpStep
+
+        if na(pocLine)
+            pocLine := line.new(vpStartT, pocPx, time, pocPx, xloc = xloc.bar_time, color = vpPocColor, width = 2)
+            vahLine := line.new(vpStartT, vahPx, time, vahPx, xloc = xloc.bar_time, color = vpVaColor, style = line.style_dotted)
+            valLine := line.new(vpStartT, valPx, time, valPx, xloc = xloc.bar_time, color = vpVaColor, style = line.style_dotted)
+            pocLbl  := label.new(time, pocPx, "POC " + vpCycle, xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = vpPocColor, size = size.tiny)
+        else
+            line.set_xy1(pocLine, vpStartT, pocPx), line.set_xy2(pocLine, time, pocPx)
+            line.set_xy1(vahLine, vpStartT, vahPx), line.set_xy2(vahLine, time, vahPx)
+            line.set_xy1(valLine, vpStartT, valPx), line.set_xy2(valLine, time, valPx)
+            label.set_xy(pocLbl, time, pocPx)
+else if not na(pocLine)
+    line.delete(pocLine), line.delete(vahLine), line.delete(valLine), label.delete(pocLbl)
+    pocLine := na
+
+// ============================================================================
+// DASHBOARD (compact)
+// ============================================================================
+
+f_glyph(int s) => s == 1 ? "▲" : s == -1 ? "▼" : "·"
+f_glyphCol(int s) => s == 1 ? color.new(color.lime, 0) : s == -1 ? color.new(color.red, 0) : color.new(color.gray, 30)
+
+f_structTxt(int trend, bool chU, bool chD, bool bU, bool bD) =>
+    g = trend == 1 ? "▲" : trend == -1 ? "▼" : "·"
+    chU or chD ? g + " CHoCH" : bU or bD ? g + " BOS" : g
+
+mutedCol = color.new(chart.fg_color, 45)
 
 if showTable and barstate.islast
-    var table tbl = table.new(f_tablePos(tablePosition), 3, 9, bgcolor = chart.bg_color, border_color = chart.fg_color, frame_color = chart.fg_color, frame_width = 1, border_width = 1)
+    var table tbl = table.new(f_tablePos(tablePosition), 4, 8, bgcolor = color.new(chart.bg_color, 15), frame_color = color.new(chart.fg_color, 60), frame_width = 1, border_width = 0)
+    var bool tblMerged = false
+    if not tblMerged
+        table.merge_cells(tbl, 0, 0, 3, 0)
+        table.merge_cells(tbl, 0, 5, 3, 5)
+        table.merge_cells(tbl, 0, 6, 3, 6)
+        table.merge_cells(tbl, 0, 7, 3, 7)
+        tblMerged := true
 
-    table.cell(tbl, 0, 0, syminfo.ticker, text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 0, "CISD", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 0, "Struktur", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
+    // Header: ticker + flow as one colored strip
+    table.cell(tbl, 0, 0, syminfo.ticker + "   " + flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
 
-    table.cell(tbl, 0, 1, "HTF " + htf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 1, f_cisdLabel(htfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(htfCISD), text_size = tSize)
-    table.cell(tbl, 2, 1, f_structLabel(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = chart.fg_color, bgcolor = f_structColor(htfTrend), text_size = tSize)
+    // Column headers
+    table.cell(tbl, 0, 1, "TF", text_color = mutedCol, text_size = size.tiny)
+    table.cell(tbl, 1, 1, "CISD", text_color = mutedCol, text_size = size.tiny)
+    table.cell(tbl, 2, 1, "Strukt", text_color = mutedCol, text_size = size.tiny)
+    if showQT
+        table.cell(tbl, 3, 1, "Q", text_color = mutedCol, text_size = size.tiny)
 
-    table.cell(tbl, 0, 2, "MTF " + mtf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 2, f_cisdLabel(mtfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(mtfCISD), text_size = tSize)
-    table.cell(tbl, 2, 2, f_structLabel(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = chart.fg_color, bgcolor = f_structColor(mtfTrend), text_size = tSize)
+    // TF rows: HTF -> Weekly Q, MTF -> Daily Q, LTF -> 6H Q
+    table.cell(tbl, 0, 2, htf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 2, f_glyph(htfCISD), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 2, f_structTxt(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = f_glyphCol(htfTrend), text_size = tSize)
+    if showQT
+        table.cell(tbl, 3, 2, "W " + f_qTxt(qW), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 3, "LTF " + ltf, text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 1, 3, f_cisdLabel(ltfCISD), text_color = chart.fg_color, bgcolor = f_cisdColor(ltfCISD), text_size = tSize)
-    table.cell(tbl, 2, 3, f_structLabel(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = chart.fg_color, bgcolor = f_structColor(ltfTrend), text_size = tSize)
+    table.cell(tbl, 0, 3, mtf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 3, f_glyph(mtfCISD), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 3, f_structTxt(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = f_glyphCol(mtfTrend), text_size = tSize)
+    if showQT
+        table.cell(tbl, 3, 3, "D " + f_qTxt(qD), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 4, "Flow", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 4, flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 4, flowDetail, text_color = chart.fg_color, bgcolor = color.new(color.gray, 85), text_size = tSize)
+    table.cell(tbl, 0, 4, ltf, text_color = chart.fg_color, text_size = tSize)
+    table.cell(tbl, 1, 4, f_glyph(ltfCISD), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 4, f_structTxt(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = f_glyphCol(ltfTrend), text_size = tSize)
+    if showQT
+        table.cell(tbl, 3, 4, "6H " + f_qTxt(q6), text_color = mutedCol, text_size = tSize)
 
-    regimeColor = regimeText == "Trend" ? color.new(color.green, 70) : regimeText == "Chop" ? color.new(color.orange, 70) : color.new(color.gray, 85)
+    // Market regime strip
+    regimeCol = regimeText == "Trend" ? color.new(color.lime, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : mutedCol
+    table.cell(tbl, 0, 5, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.tiny)
 
-    table.cell(tbl, 0, 5, "Markt", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 5, "ATR " + str.tostring(atrVal, format.mintick), text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 2, 5, "ADX " + str.tostring(adxVal, "#.#") + " (" + regimeText + ")", text_color = chart.fg_color, bgcolor = regimeColor, text_size = tSize)
+    // SL/TP + contracts strip
+    sizeCol = contracts <= 0 ? color.new(color.red, 0) : regimeText == "Chop" ? color.new(color.orange, 0) : color.new(color.lime, 0)
+    sizeTxt = contracts <= 0 ? "0x – Stop zu groß!" : str.tostring(contracts) + "x" + (rawContracts > maxContracts ? " (Cap)" : "")
+    table.cell(tbl, 0, 6, "SL " + str.tostring(stopDist, format.mintick) + "  ·  TP " + str.tostring(tpDist, format.mintick) + " (" + str.tostring(rrRatio, "#.#") + "R)  ·  " + sizeTxt, text_color = sizeCol, text_size = size.tiny)
 
-    table.cell(tbl, 0, 6, "Konto", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 6, "$" + str.tostring(accountSize, "#,###"), text_color = chart.fg_color, text_size = tSize)
-    table.cell(tbl, 2, 6, "Risiko " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###.##"), text_color = chart.fg_color, text_size = tSize)
-
-    table.cell(tbl, 0, 7, "SL / TP", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 7, "SL " + str.tostring(stopDist, format.mintick) + " Pkt (" + str.tostring(slMult, "#.#") + "×ATR)", text_color = chart.fg_color, bgcolor = color.new(color.red, 85), text_size = tSize)
-    table.cell(tbl, 2, 7, "TP " + str.tostring(tpDist, format.mintick) + " Pkt (" + str.tostring(rrRatio, "#.#") + "R)", text_color = chart.fg_color, bgcolor = color.new(color.green, 85), text_size = tSize)
-
-    sizeColor = contracts <= 0 ? color.new(color.red, 60) : regimeText == "Chop" ? color.new(color.orange, 70) : color.new(color.green, 70)
-    sizeNote = contracts <= 0 ? "Stop zu groß fürs Risiko!" : rawContracts > maxContracts ? "Cap aktiv (" + str.tostring(rawContracts) + " möglich)" : "echtes Risiko $" + str.tostring(riskActual, "#,###.##")
-
-    table.cell(tbl, 0, 8, "Kontrakte", text_color = chart.bg_color, bgcolor = chart.fg_color, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 8, str.tostring(contracts) + "x  ($" + str.tostring(pointValue, "#.##") + "/Pkt)", text_color = chart.fg_color, bgcolor = sizeColor, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 8, sizeNote, text_color = chart.fg_color, text_size = tSize)
+    // Account strip
+    table.cell(tbl, 0, 7, "$" + str.tostring(accountSize, "#,###") + "  ·  " + str.tostring(riskPct, "#.##") + "% = $" + str.tostring(riskMoney, "#,###") + "  ·  $" + str.tostring(pointValue, "#.##") + "/Pkt", text_color = mutedCol, text_size = size.tiny)
