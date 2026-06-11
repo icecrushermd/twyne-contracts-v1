@@ -40,6 +40,12 @@ showStatsRow  = input.bool(true, "Setup-Statistik-Zeile anzeigen", group = grpTa
 grpAlert = "Flow Alerts"
 alertOnFlowChange = input.bool(false, "Alert bei Wechsel zu Longflow / Shortflow", group = grpAlert)
 alertOnLTFFlip    = input.bool(false, "Alert wenn LTF in Richtung von HTF+MTF dreht (Pullback Ende)", group = grpAlert)
+alertOnSetup = input.bool(true, "Alert bei neuem Trade-Setup (Entry/SL/TP)", group = grpAlert, tooltip = "Feuert, wenn ein Setup alle Filter passiert hat und Entry/SL/TP gezeichnet werden - inkl. Richtung, Levels, Kontrakten und Confluence-Score.")
+alertOnExit  = input.bool(true, "Alert bei Setup-Ende (TP/SL/invalidiert/Timeout)", group = grpAlert)
+alertOnBE    = input.bool(true, "Alert bei 1R Gewinn (Break-Even möglich)", group = grpAlert)
+alertOnTrap  = input.bool(false, "Alert bei Trapped Longs/Shorts", group = grpAlert)
+alertOnDiv   = input.bool(false, "Alert bei CVD-Divergenz", group = grpAlert)
+alertOnKZ    = input.bool(false, "Alert bei Killzone-Start", group = grpAlert)
 
 grpRisk = "Risiko & Positionsgröße"
 accountSize  = input.float(10000, "Kontogröße ($)", minval = 100, step = 500, group = grpRisk)
@@ -722,6 +728,8 @@ if showTraps
             color trapCol = trapDir == 1 ? color.new(color.red, 0) : color.new(color.lime, 0)
             line.new(trapStart, trapLevel, bar_index + lookAheadBars, trapLevel, color = trapCol, style = line.style_dashed, width = 1)
             label.new(bar_index, trapLevel, trapDir == 1 ? "Trapped Longs" : "Trapped Shorts", style = trapDir == 1 ? label.style_label_down : label.style_label_up, color = color.new(color.white, 100), textcolor = trapCol, size = size.small)
+            if alertOnTrap
+                alert((trapDir == 1 ? "Trapped Longs" : "Trapped Shorts") + " bei " + str.tostring(trapLevel, format.mintick) + " (" + syminfo.ticker + ") - mögliches Reversal", alert.freq_once_per_bar_close)
             trapDir := 0
         else if bar_index - trapStart > trapConfirmBars
             trapDir := 0
@@ -762,6 +770,13 @@ if not na(divPL)
 
 plotshape(showCvdDiv and bearDiv, "CVD Divergenz Bear", style = shape.diamond, location = location.abovebar, color = color.new(color.fuchsia, 0), size = size.tiny, offset = -pivRight)
 plotshape(showCvdDiv and bullDiv, "CVD Divergenz Bull", style = shape.diamond, location = location.belowbar, color = color.new(color.aqua, 0), size = size.tiny, offset = -pivRight)
+
+if alertOnDiv and (bearDiv or bullDiv)
+    alert("CVD-Divergenz " + (bearDiv ? "bearish (Hoch ohne CVD-Hoch)" : "bullish (Tief ohne CVD-Tief)") + " - " + syminfo.ticker, alert.freq_once_per_bar_close)
+
+if alertOnKZ and inKZ and not inKZ[1]
+    string kzName = nyMin >= 120 and nyMin < 300 ? "London Open" : nyMin >= 570 and nyMin < 720 ? "NY AM" : "NY PM"
+    alert("Killzone-Start: " + kzName + " (" + syminfo.ticker + ")", alert.freq_once_per_bar)
 
 // Volume profile levels (assigned in the VP section below, persisted across bars)
 var float pocPxG = na
@@ -895,12 +910,16 @@ if newSignal
     tradeEntry    := entryPx
     tradeR        := math.abs(entryPx - slPx)
     beFlagged     := false
+    if alertOnSetup
+        alert("Neues Setup " + (dirSign == 1 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Entry " + str.tostring(entryPx, format.mintick) + " | SL " + str.tostring(slPx, format.mintick) + " | TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R) | " + str.tostring(contracts) + "x | Score " + str.tostring(score) + "/7" + deltaWarn, alert.freq_once_per_bar_close)
 else if tradeDir != 0
     // Break-even hint: once the setup has been 1R in profit, suggest moving SL
     if beHint and not beFlagged and tradeR > 0 and ((tradeDir == 1 and high >= tradeEntry + tradeR) or (tradeDir == -1 and low <= tradeEntry - tradeR))
         beFlagged := true
         line.set_color(entryLine, color.new(color.teal, 0))
         label.set_text(entryLbl, label.get_text(entryLbl) + "  [BE möglich]")
+        if alertOnBE
+            alert("1R erreicht - Break-Even möglich (" + (tradeDir == 1 ? "Long" : "Short") + " " + syminfo.ticker + ", Entry " + str.tostring(tradeEntry, format.mintick) + ")", alert.freq_once_per_bar)
     string endStatus = na
     if (tradeDir == 1 and low <= tradeSL) or (tradeDir == -1 and high >= tradeSL)
         endStatus := "SL hit"
@@ -925,6 +944,8 @@ else if tradeDir != 0
             statLoss += 1
         else
             statOther += 1
+        if alertOnExit
+            alert("Setup beendet: " + endStatus + " (" + (tradeDir == 1 ? "Long" : "Short") + " " + syminfo.ticker + ", Entry " + str.tostring(tradeEntry, format.mintick) + ")", alert.freq_once_per_bar)
         tradeDir := 0
 
 if not na(entryLine) and tradeDir != 0
