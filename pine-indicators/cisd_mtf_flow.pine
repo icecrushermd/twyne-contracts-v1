@@ -22,6 +22,12 @@ showStructureBreaks = input.bool(true, "CHoCH Marker auf Chart anzeigen", group 
 pivLeft  = input.int(5, "Pivot Left Bars", minval = 2, group = grpStruct)
 pivRight = input.int(2, "Pivot Right Bars", minval = 1, group = grpStruct)
 
+grpPullback = "Pullback / Trend-Reife"
+showPullbackRow = input.bool(true, "Pullback-Zeile im Dashboard", group = grpPullback, tooltip = "Zeigt die Tiefe des aktuellen Rücksetzers (% des letzten Impuls-Legs) und die Anzahl der Impuls-Legs in Folge (Trend-Reife).")
+showPullbackZone = input.bool(true, "Einstiegszone (38.2-61.8%) einzeichnen", group = grpPullback, tooltip = "Zeichnet die Fibonacci-'Sweet Spot'-Zone des laufenden Pullbacks als Box ein - klassische Rücksetzer-Einstiegszone in Trendrichtung.")
+pbSweetMin = input.float(38.2, "Sweet Spot von (%)", minval = 0, maxval = 100, step = 0.1, group = grpPullback)
+pbSweetMax = input.float(61.8, "Sweet Spot bis (%)", minval = 0, maxval = 100, step = 0.1, group = grpPullback)
+
 grpMTF = "Multi-Timeframe Lieferstatus"
 tfPreset = input.string("Daytrade (D / 1H / 5m)", "Preset",
      options = ["Custom", "Daytrade (D / 1H / 5m)", "Swing (1W / 4H / 15m)", "Scalp (4H / 15m / 1m)"], group = grpMTF)
@@ -73,7 +79,7 @@ tradeTimeoutBars = input.int(90, "Setup-Timeout (Bars)", minval = 10, group = gr
 fvgEntryMode = input.bool(true, "Entry am ersten FVG nach Flip", group = grpRisk, tooltip = "Statt sofort beim LTF-Flip einzusteigen, wird auf das erste Fair Value Gap in Trade-Richtung gewartet - dessen Mitte wird zum Entry, das FVG wird als Entry-Zone eingezeichnet.")
 fvgScanBars  = input.int(30, "FVG-Suchfenster (Bars)", minval = 3, group = grpRisk, tooltip = "Erscheint innerhalb dieses Fensters kein FVG in Trade-Richtung, verfällt das Signal.")
 beHint    = input.bool(true, "Break-Even-Hinweis bei 1R Gewinn", group = grpRisk, tooltip = "Sobald ein laufendes Setup 1R im Gewinn war, wird die Entry-Linie türkis und das Label mit [BE möglich] markiert - Erinnerung, den Stop auf Einstand zu ziehen.")
-showScore = input.bool(true, "Confluence-Score im Entry-Label", group = grpRisk, tooltip = "Bewertet jedes Signal mit 0-7 Punkten: HTF-Flow, MTF-Struktur, CVD, Absorption, Killzone, Quarter Q2/Q3, Entry nahe Volumen-/Gap-Level.")
+showScore = input.bool(true, "Confluence-Score im Entry-Label", group = grpRisk, tooltip = "Bewertet jedes Signal mit 0-8 Punkten: HTF-Flow, MTF-Struktur, CVD, Absorption, Killzone, Quarter Q2/Q3, Entry nahe Volumen-/Gap-Level, Pullback im Sweet Spot.")
 
 grpTO = "True Opens & Opening Gaps"
 showTDOln  = input.bool(true, "True Day Open (00:00 NY)", inline = "tdo", group = grpTO)
@@ -778,6 +784,61 @@ if alertOnKZ and inKZ and not inKZ[1]
     string kzName = nyMin >= 120 and nyMin < 300 ? "London Open" : nyMin >= 570 and nyMin < 720 ? "NY AM" : "NY PM"
     alert("Killzone-Start: " + kzName + " (" + syminfo.ticker + ")", alert.freq_once_per_bar)
 
+// ============================================================================
+// PULLBACK-TIEFE & IMPULS-LEG-ZÄHLER
+// ============================================================================
+// Misst die Tiefe des aktuellen Rücksetzers als % des letzten Impuls-Legs
+// (zwischen den beiden letzten bestätigten Pivots) und zählt, wie viele
+// Impuls-Legs in Folge in Trendrichtung gelaufen sind ("Trend-Reife").
+var float pbPrevPivot       = na
+var float pbLastPivot       = na
+var bool  pbLastPivotIsHigh = false
+var int   pbLastPivotBar    = na
+var int   legCount          = 0
+
+if not na(divPH)
+    pbPrevPivot       := pbLastPivot
+    pbLastPivot       := divPH
+    pbLastPivotIsHigh := true
+    pbLastPivotBar    := bar_index - pivRight
+if not na(divPL)
+    pbPrevPivot       := pbLastPivot
+    pbLastPivot       := divPL
+    pbLastPivotIsHigh := false
+    pbLastPivotBar    := bar_index - pivRight
+
+if chochUp or chochDown
+    legCount := 1
+else if (_chartTrend == 1 and not na(divPH)) or (_chartTrend == -1 and not na(divPL))
+    legCount += 1
+
+float pullbackPct = na
+float pbLegHigh = na
+float pbLegLow  = na
+if _chartTrend == 1 and pbLastPivotIsHigh and not na(pbPrevPivot) and pbLastPivot > pbPrevPivot
+    pullbackPct := math.max(0.0, (pbLastPivot - close) / (pbLastPivot - pbPrevPivot) * 100.0)
+    pbLegHigh   := pbLastPivot
+    pbLegLow    := pbPrevPivot
+else if _chartTrend == -1 and not pbLastPivotIsHigh and not na(pbPrevPivot) and pbPrevPivot > pbLastPivot
+    pullbackPct := math.max(0.0, (close - pbLastPivot) / (pbPrevPivot - pbLastPivot) * 100.0)
+    pbLegHigh   := pbPrevPivot
+    pbLegLow    := pbLastPivot
+
+bool inSweetSpot = not na(pullbackPct) and pullbackPct >= pbSweetMin and pullbackPct <= pbSweetMax
+
+// Einstiegszone: Fibonacci "Sweet Spot" des laufenden Pullbacks
+var box pbZone = na
+if showPullbackZone and not na(pullbackPct)
+    float zoneLeg = pbLegHigh - pbLegLow
+    float zHi = _chartTrend == 1 ? pbLegHigh - zoneLeg * pbSweetMin / 100.0 : pbLegLow + zoneLeg * pbSweetMax / 100.0
+    float zLo = _chartTrend == 1 ? pbLegHigh - zoneLeg * pbSweetMax / 100.0 : pbLegLow + zoneLeg * pbSweetMin / 100.0
+    color zCol = _chartTrend == 1 ? color.lime : color.red
+    box.delete(pbZone)
+    pbZone := box.new(pbLastPivotBar, zHi, bar_index + lookAheadBars, zLo, bgcolor = color.new(zCol, 90), border_color = color.new(zCol, 60), border_style = line.style_dotted, text = "Sweet Spot", text_size = size.tiny, text_color = color.new(zCol, 30), text_halign = text.align_right)
+else if not showPullbackZone and not na(pbZone)
+    box.delete(pbZone)
+    pbZone := na
+
 // Volume profile levels (assigned in the VP section below, persisted across bars)
 var float pocPxG = na
 var float vahPxG = na
@@ -876,7 +937,7 @@ if newSignal
                         tpPx := lvl
                         snapped := true
     rrEff = stopDist > 0 ? math.abs(tpPx - entryPx) / stopDist : rrRatio
-    // Confluence score (0-7): how many independent factors back this signal?
+    // Confluence score (0-8): how many independent factors back this signal?
     int score = 0
     score += htfCISD == dirSign ? 1 : 0
     score += mtfTrend == dirSign ? 1 : 0
@@ -884,6 +945,7 @@ if newSignal
     score += (dirSign == 1 ? sinceBullAbs <= 10 : sinceBearAbs <= 10) ? 1 : 0
     score += inKZ ? 1 : 0
     score += (q90 == 2 or q90 == 3) ? 1 : 0
+    score += inSweetSpot and _chartTrend == dirSign ? 1 : 0
     float[] cfLvls = array.from(pocPxG, vahPxG, valPxG, ndogMid, nwogMid)
     float minLvlDist = na
     for i = 0 to 4
@@ -893,7 +955,7 @@ if newSignal
             if na(minLvlDist) or d < minLvlDist
                 minLvlDist := d
     score += not na(minLvlDist) and minLvlDist <= atrVal * 0.5 ? 1 : 0
-    string scoreTxt = showScore ? "  ·  Score " + str.tostring(score) + "/7" : ""
+    string scoreTxt = showScore ? "  ·  Score " + str.tostring(score) + "/8" : ""
     line.delete(entryLine), label.delete(entryLbl)
     line.delete(slLine),    label.delete(slLbl)
     line.delete(tpLine),    label.delete(tpLbl)
@@ -911,7 +973,7 @@ if newSignal
     tradeR        := math.abs(entryPx - slPx)
     beFlagged     := false
     if alertOnSetup
-        alert("Neues Setup " + (dirSign == 1 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Entry " + str.tostring(entryPx, format.mintick) + " | SL " + str.tostring(slPx, format.mintick) + " | TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R) | " + str.tostring(contracts) + "x | Score " + str.tostring(score) + "/7" + deltaWarn, alert.freq_once_per_bar_close)
+        alert("Neues Setup " + (dirSign == 1 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Entry " + str.tostring(entryPx, format.mintick) + " | SL " + str.tostring(slPx, format.mintick) + " | TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R) | " + str.tostring(contracts) + "x | Score " + str.tostring(score) + "/8" + deltaWarn, alert.freq_once_per_bar_close)
 else if tradeDir != 0
     // Break-even hint: once the setup has been 1R in profit, suggest moving SL
     if beHint and not beFlagged and tradeR > 0 and ((tradeDir == 1 and high >= tradeEntry + tradeR) or (tradeDir == -1 and low <= tradeEntry - tradeR))
@@ -1096,6 +1158,9 @@ if showTable and barstate.islast
     int rOF = rNext
     if showDeltaRow
         rNext += 1
+    int rPB = rNext
+    if showPullbackRow
+        rNext += 1
     int rStat = rNext
     if showStatsRow
         rNext += 1
@@ -1109,6 +1174,8 @@ if showTable and barstate.islast
         table.merge_cells(tbl, 0, 5, 3, 5)
         if showDeltaRow
             table.merge_cells(tbl, 0, rOF, 3, rOF)
+        if showPullbackRow
+            table.merge_cells(tbl, 0, rPB, 3, rPB)
         if showStatsRow
             table.merge_cells(tbl, 0, rStat, 3, rStat)
         table.merge_cells(tbl, 0, rSize, 3, rSize)
@@ -1152,6 +1219,12 @@ if showTable and barstate.islast
         absTxt  = sinceBullAbs <= 3 ? "  ·  Abs▲" : sinceBearAbs <= 3 ? "  ·  Abs▼" : ""
         ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt
         table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.small, text_formatting = text.format_bold)
+
+    // Pullback-Tiefe & Impuls-Leg-Zähler
+    if showPullbackRow
+        string pbTxt = na(pullbackPct) ? "Pullback –  ·  Leg " + str.tostring(legCount) : "Pullback " + str.tostring(pullbackPct, "#") + "%  ·  Leg " + str.tostring(legCount) + (inSweetSpot ? "  ·  Sweet Spot" : "")
+        color pbCol = inSweetSpot ? (_chartTrend == 1 ? color.new(color.lime, 0) : color.new(color.red, 0)) : mutedCol
+        table.cell(tbl, 0, rPB, pbTxt, text_color = pbCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Setup statistics strip (running backtest of current settings)
     if showStatsRow
