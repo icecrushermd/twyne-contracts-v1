@@ -867,6 +867,10 @@ var int   statLoss  = 0
 var int   statOther = 0
 var float statSumR  = 0.0
 
+// Counts consecutive bars where the multi-TF flow disagrees with the open
+// trade direction - avoids closing a fresh setup on a single noisy LTF flip.
+var int flowMisalignCount = 0
+
 // Optional FVG entry: after a flip, wait for the first fair value gap in trade
 // direction and enter at its midpoint instead of the flip close.
 var int fvgScanDir   = 0
@@ -972,6 +976,7 @@ if newSignal
     tradeEntry    := entryPx
     tradeR        := math.abs(entryPx - slPx)
     beFlagged     := false
+    flowMisalignCount := 0
     if alertOnSetup
         alert("Neues Setup " + (dirSign == 1 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Entry " + str.tostring(entryPx, format.mintick) + " | SL " + str.tostring(slPx, format.mintick) + " | TP " + str.tostring(tpPx, format.mintick) + " (" + str.tostring(rrEff, "#.#") + "R) | " + str.tostring(contracts) + "x | Score " + str.tostring(score) + "/8" + deltaWarn, alert.freq_once_per_bar_close)
 else if tradeDir != 0
@@ -982,12 +987,19 @@ else if tradeDir != 0
         label.set_text(entryLbl, label.get_text(entryLbl) + "  [BE möglich]")
         if alertOnBE
             alert("1R erreicht - Break-Even möglich (" + (tradeDir == 1 ? "Long" : "Short") + " " + syminfo.ticker + ", Entry " + str.tostring(tradeEntry, format.mintick) + ")", alert.freq_once_per_bar)
+    // Flow-Invalidierung erst nach 2 Bars Gegenflow auslösen - vermeidet,
+    // dass ein frisches Setup von einem einzelnen LTF-Flip sofort beendet wird.
+    if curFlow != tradeDir
+        flowMisalignCount += 1
+    else
+        flowMisalignCount := 0
+
     string endStatus = na
     if (tradeDir == 1 and low <= tradeSL) or (tradeDir == -1 and high >= tradeSL)
         endStatus := "SL hit"
     else if (tradeDir == 1 and high >= tradeTP) or (tradeDir == -1 and low <= tradeTP)
         endStatus := "TP hit ✓"
-    else if curFlow != tradeDir
+    else if flowMisalignCount >= 2
         endStatus := "invalidiert (Flow)"
     else if bar_index - tradeStartBar > tradeTimeoutBars
         endStatus := "Timeout"
@@ -996,19 +1008,22 @@ else if tradeDir != 0
         line.set_color(entryLine, grayCol), line.set_color(slLine, grayCol), line.set_color(tpLine, grayCol)
         label.set_textcolor(entryLbl, grayCol), label.set_textcolor(slLbl, grayCol), label.set_textcolor(tpLbl, grayCol)
         label.set_text(entryLbl, label.get_text(entryLbl) + "  [" + endStatus + "]")
-        // Statistics: TP = full target R, SL = -1R, otherwise mark-to-market R
+        // Statistik: TP = volles Ziel-R, SL = -1R, sonst Mark-to-Market-R bei
+        // Exit - das Vorzeichen entscheidet, ob das Setup als Win oder Loss
+        // gewertet wird (statt alles außer TP/SL in "Other" zu verstecken).
         if tradeR > 0
             float closedR = endStatus == "TP hit ✓" ? math.abs(tradeTP - tradeEntry) / tradeR : endStatus == "SL hit" ? -1.0 : (close - tradeEntry) * tradeDir / tradeR
             statSumR += closedR
-        if endStatus == "TP hit ✓"
-            statWins += 1
-        else if endStatus == "SL hit"
-            statLoss += 1
+            if closedR > 0
+                statWins += 1
+            else
+                statLoss += 1
         else
             statOther += 1
         if alertOnExit
             alert("Setup beendet: " + endStatus + " (" + (tradeDir == 1 ? "Long" : "Short") + " " + syminfo.ticker + ", Entry " + str.tostring(tradeEntry, format.mintick) + ")", alert.freq_once_per_bar)
         tradeDir := 0
+        flowMisalignCount := 0
 
 if not na(entryLine) and tradeDir != 0
     line.set_x2(entryLine, bar_index + lookAheadBars), label.set_x(entryLbl, bar_index + lookAheadBars)
@@ -1154,7 +1169,7 @@ mutedCol = color.new(#b2b5be, 0)
 strongCol = color.new(#d1d4dc, 0)
 
 if showTable and barstate.islast
-    int rNext = 6
+    int rNext = 7
     int rOF = rNext
     if showDeltaRow
         rNext += 1
@@ -1171,7 +1186,8 @@ if showTable and barstate.islast
     var bool tblMerged = false
     if not tblMerged
         table.merge_cells(tbl, 0, 0, 3, 0)
-        table.merge_cells(tbl, 0, 5, 3, 5)
+        table.merge_cells(tbl, 0, 1, 3, 1)
+        table.merge_cells(tbl, 0, 6, 3, 6)
         if showDeltaRow
             table.merge_cells(tbl, 0, rOF, 3, rOF)
         if showPullbackRow
@@ -1185,33 +1201,52 @@ if showTable and barstate.islast
     // Header: ticker + flow as one colored strip
     table.cell(tbl, 0, 0, syminfo.ticker + "   " + flowText, text_color = color.white, bgcolor = flowColor, text_size = tSize, text_formatting = text.format_bold)
 
+    // Action-Zeile: was JETZT zu tun ist - höchste Priorität, direkt unter dem Header
+    string actionTxt = "Kein Setup - beobachten"
+    color  actionCol = mutedCol
+    if tradeDir != 0
+        string dirTxt = tradeDir == 1 ? "LONG" : "SHORT"
+        if beFlagged
+            actionTxt := "BE setzen: SL -> " + str.tostring(tradeEntry, format.mintick) + " (" + dirTxt + ")"
+            actionCol := color.new(color.teal, 0)
+        else
+            actionTxt := dirTxt + " aktiv - SL " + str.tostring(tradeSL, format.mintick) + " / TP " + str.tostring(tradeTP, format.mintick) + " halten"
+            actionCol := tradeDir == 1 ? color.new(color.lime, 0) : color.new(color.red, 0)
+    else if inSweetSpot and _chartTrend != 0 and curFlow == _chartTrend
+        actionTxt := "Pullback-Zone erreicht (" + (_chartTrend == 1 ? "Long" : "Short") + ") - auf CISD-Flip warten"
+        actionCol := _chartTrend == 1 ? color.new(color.lime, 0) : color.new(color.red, 0)
+    else if inKZ and curFlow != 0
+        actionTxt := "Killzone aktiv (" + (curFlow == 1 ? "LONGFLOW" : "SHORTFLOW") + ") - auf Signal warten"
+        actionCol := color.new(#ffa726, 0)
+    table.cell(tbl, 0, 1, actionTxt, text_color = color.white, bgcolor = actionCol, text_size = size.small, text_formatting = text.format_bold)
+
     // Column headers
-    table.cell(tbl, 0, 1, "TF", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 1, "CISD", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 1, "Strukt", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
+    table.cell(tbl, 0, 2, "TF", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 2, "CISD", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 2, "Strukt", text_color = mutedCol, text_size = size.tiny, text_formatting = text.format_bold)
 
     // TF rows: HTF -> Weekly Q, MTF -> Daily Q, LTF -> 6H Q
-    table.cell(tbl, 0, 2, htf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 2, f_cisdCell(htfCISD, htfFlipAt), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 2, f_structTxt(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = f_glyphCol(htfTrend), text_size = tSize)
+    table.cell(tbl, 0, 3, htf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 3, f_cisdCell(htfCISD, htfFlipAt), text_color = f_glyphCol(htfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 3, f_structTxt(htfTrend, htfChU, htfChD, htfBU, htfBD), text_color = f_glyphCol(htfTrend), text_size = tSize)
     if showQT
-        table.cell(tbl, 3, 2, "W " + f_qTxt(qW), text_color = mutedCol, text_size = tSize)
+        table.cell(tbl, 3, 3, "W " + f_qTxt(qW), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 3, mtf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 3, f_cisdCell(mtfCISD, mtfFlipAt), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 3, f_structTxt(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = f_glyphCol(mtfTrend), text_size = tSize)
+    table.cell(tbl, 0, 4, mtf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 4, f_cisdCell(mtfCISD, mtfFlipAt), text_color = f_glyphCol(mtfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 4, f_structTxt(mtfTrend, mtfChU, mtfChD, mtfBU, mtfBD), text_color = f_glyphCol(mtfTrend), text_size = tSize)
     if showQT
-        table.cell(tbl, 3, 3, "D " + f_qTxt(qD), text_color = mutedCol, text_size = tSize)
+        table.cell(tbl, 3, 4, "D " + f_qTxt(qD), text_color = mutedCol, text_size = tSize)
 
-    table.cell(tbl, 0, 4, ltf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 1, 4, f_cisdCell(ltfCISD, ltfFlipAt), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
-    table.cell(tbl, 2, 4, f_structTxt(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = f_glyphCol(ltfTrend), text_size = tSize)
+    table.cell(tbl, 0, 5, ltf, text_color = strongCol, text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 1, 5, f_cisdCell(ltfCISD, ltfFlipAt), text_color = f_glyphCol(ltfCISD), text_size = tSize, text_formatting = text.format_bold)
+    table.cell(tbl, 2, 5, f_structTxt(ltfTrend, ltfChU, ltfChD, ltfBU, ltfBD), text_color = f_glyphCol(ltfTrend), text_size = tSize)
     if showQT
-        table.cell(tbl, 3, 4, "6H " + f_qTxt(q6), text_color = mutedCol, text_size = tSize)
+        table.cell(tbl, 3, 5, "6H " + f_qTxt(q6), text_color = mutedCol, text_size = tSize)
 
     // Market regime strip
     regimeCol = regimeText == "Trend" ? color.new(color.lime, 0) : regimeText == "Chop" ? color.new(#ffa726, 0) : mutedCol
-    table.cell(tbl, 0, 5, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.small, text_formatting = text.format_bold)
+    table.cell(tbl, 0, 6, "ATR " + str.tostring(atrVal, format.mintick) + "  ·  ADX " + str.tostring(adxVal, "#.#") + " " + regimeText, text_color = regimeCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Orderflow / Delta strip
     if showDeltaRow
