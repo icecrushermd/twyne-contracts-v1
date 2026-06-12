@@ -19,7 +19,7 @@ keepLevels        = input.bool(false, "Keep old CISD levels", group = grpCISD)
 
 grpStruct = "Strukturbrüche (BOS / CHoCH)"
 showStructureBreaks = input.bool(true, "CHoCH Marker auf Chart anzeigen", group = grpStruct)
-pivLeft  = input.int(5, "Pivot Left Bars", minval = 2, group = grpStruct)
+pivLeft  = input.int(2, "Pivot Left Bars", minval = 1, group = grpStruct, tooltip = "ICT-Fraktale: 1/1 = 3-Candle (Short-Term High/Low), 2/2 = 5-Candle (Intermediate-Term High/Low).")
 pivRight = input.int(2, "Pivot Right Bars", minval = 1, group = grpStruct)
 
 grpPullback = "Pullback / Trend-Reife"
