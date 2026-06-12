@@ -113,6 +113,11 @@ kzFilterMode = input.string("Warnen", "Signal-Filter", options = ["Aus", "Warnen
 kzLondon = input.bool(true, "London Open (02:00–05:00)", group = grpKZ)
 kzNYAM   = input.bool(true, "NY AM (09:30–12:00)", group = grpKZ)
 kzNYPM   = input.bool(true, "NY PM (13:30–16:00)", group = grpKZ)
+showSessionLevels = input.bool(true, "Session-Hoch/Tief-Linien (Asia/London/NY)", group = grpKZ, tooltip = "Zeichnet Hoch/Tief der Asia- (18:00–03:00), London- (03:00–08:00) und NY-Session (08:00–17:00, NY-Zeit) als Referenzlevels - klassische Liquidity-Sweep-Ziele.")
+
+grpExtra = "Erweiterungen"
+showDivAge = input.bool(true, "Divergenz-Alter in Delta-Zeile", group = grpExtra, tooltip = "Zeigt in der Delta-Zeile, vor wie vielen Bars die letzte CVD-Divergenz auftrat.")
+showDailyBias = input.bool(true, "Daily-Bias-Zeile im Dashboard", group = grpExtra, tooltip = "Zeigt die aktuelle HTF-Trendrichtung und den Preis, an dem sie per CHoCH entstanden ist.")
 
 grpQT = "Quarter Theory"
 showQT = input.bool(true, "Quarter-Spalte im Dashboard", group = grpQT)
@@ -335,6 +340,17 @@ mtfBU = useConfirmed ? mtfBU_raw[1] : mtfBU_raw
 mtfBD = useConfirmed ? mtfBD_raw[1] : mtfBD_raw
 ltfBU = useConfirmed ? ltfBU_raw[1] : ltfBU_raw
 ltfBD = useConfirmed ? ltfBD_raw[1] : ltfBD_raw
+
+// Daily Bias: HTF-Trendrichtung + Preis, an dem sie per CHoCH entstanden ist
+var float dailyBiasPx  = na
+var int   dailyBiasDir = 0
+htfPP = useConfirmed ? _htfPP[1] : _htfPP
+if htfChU
+    dailyBiasDir := 1
+    dailyBiasPx  := htfPP
+if htfChD
+    dailyBiasDir := -1
+    dailyBiasPx  := htfPP
 
 // ============================================================================
 // FLOW LOGIC
@@ -780,9 +796,62 @@ plotshape(showCvdDiv and bullDiv, "CVD Divergenz Bull", style = shape.diamond, l
 if alertOnDiv and (bearDiv or bullDiv)
     alert("CVD-Divergenz " + (bearDiv ? "bearish (Hoch ohne CVD-Hoch)" : "bullish (Tief ohne CVD-Tief)") + " - " + syminfo.ticker, alert.freq_once_per_bar_close)
 
+// Alter der letzten CVD-Divergenz (für die Delta-Zeile im Dashboard)
+var int    lastDivBar  = na
+var string lastDivType = na
+if bearDiv
+    lastDivBar  := bar_index - pivRight
+    lastDivType := "Bear"
+if bullDiv
+    lastDivBar  := bar_index - pivRight
+    lastDivType := "Bull"
+
 if alertOnKZ and inKZ and not inKZ[1]
     string kzName = nyMin >= 120 and nyMin < 300 ? "London Open" : nyMin >= 570 and nyMin < 720 ? "NY AM" : "NY PM"
     alert("Killzone-Start: " + kzName + " (" + syminfo.ticker + ")", alert.freq_once_per_bar)
+
+// ============================================================================
+// SESSION-HOCH/TIEF-LINIEN (Asia / London / NY)
+// ============================================================================
+// Zeichnet das Hoch/Tief der jeweils letzten abgeschlossenen Session als
+// gestrichelte Referenzlinien - typische Ziele für Liquidity Sweeps.
+f_inSession(int startMin, int endMin, int nowMin) =>
+    startMin < endMin ? (nowMin >= startMin and nowMin < endMin) : (nowMin >= startMin or nowMin < endMin)
+
+f_sessionLevels(bool active, color col, string lbl) =>
+    var float sHigh = na
+    var float sLow  = na
+    var bool  prevActive = false
+    var line  hLine = na
+    var line  lLine = na
+    var label hLbl  = na
+    var label lLbl  = na
+    if active and not prevActive
+        sHigh := high
+        sLow  := low
+    else if active
+        sHigh := math.max(sHigh, high)
+        sLow  := math.min(sLow, low)
+    else if prevActive
+        line.delete(hLine)
+        line.delete(lLine)
+        label.delete(hLbl)
+        label.delete(lLbl)
+        hLine := line.new(bar_index, sHigh, bar_index + lookAheadBars, sHigh, color = color.new(col, 30), style = line.style_dotted, width = 1)
+        lLine := line.new(bar_index, sLow,  bar_index + lookAheadBars, sLow,  color = color.new(col, 30), style = line.style_dotted, width = 1)
+        hLbl  := label.new(bar_index + lookAheadBars, sHigh, lbl + " High", style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.new(col, 20), size = size.tiny)
+        lLbl  := label.new(bar_index + lookAheadBars, sLow,  lbl + " Low",  style = label.style_label_left, color = color.new(color.white, 100), textcolor = color.new(col, 20), size = size.tiny)
+    else if not na(hLine)
+        line.set_x2(hLine, bar_index + lookAheadBars)
+        line.set_x2(lLine, bar_index + lookAheadBars)
+        label.set_x(hLbl, bar_index + lookAheadBars)
+        label.set_x(lLbl, bar_index + lookAheadBars)
+    prevActive := active
+
+if showSessionLevels
+    f_sessionLevels(f_inSession(1080, 180, nyMin), color.yellow, "Asia")
+    f_sessionLevels(f_inSession(180, 480, nyMin), color.aqua, "London")
+    f_sessionLevels(f_inSession(480, 1020, nyMin), color.orange, "NY")
 
 // ============================================================================
 // PULLBACK-TIEFE & IMPULS-LEG-ZÄHLER
@@ -1176,6 +1245,9 @@ if showTable and barstate.islast
     int rPB = rNext
     if showPullbackRow
         rNext += 1
+    int rBias = rNext
+    if showDailyBias
+        rNext += 1
     int rStat = rNext
     if showStatsRow
         rNext += 1
@@ -1192,6 +1264,8 @@ if showTable and barstate.islast
             table.merge_cells(tbl, 0, rOF, 3, rOF)
         if showPullbackRow
             table.merge_cells(tbl, 0, rPB, 3, rPB)
+        if showDailyBias
+            table.merge_cells(tbl, 0, rBias, 3, rBias)
         if showStatsRow
             table.merge_cells(tbl, 0, rStat, 3, rStat)
         table.merge_cells(tbl, 0, rSize, 3, rSize)
@@ -1252,7 +1326,8 @@ if showTable and barstate.islast
     if showDeltaRow
         cvdCol  = cvd > 0 ? color.new(color.lime, 0) : cvd < 0 ? color.new(color.red, 0) : mutedCol
         absTxt  = sinceBullAbs <= 3 ? "  ·  Abs▲" : sinceBearAbs <= 3 ? "  ·  Abs▼" : ""
-        ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt
+        divAgeTxt = showDivAge and not na(lastDivBar) ? "  ·  Div " + lastDivType + " vor " + str.tostring(bar_index - lastDivBar) + "B" : ""
+        ofTxt   = "Δ " + (barDelta >= 0 ? "+" : "") + str.tostring(barDelta, format.volume) + "  ·  CVD " + (cvd >= 0 ? "+" : "") + str.tostring(cvd, format.volume) + absTxt + divAgeTxt
         table.cell(tbl, 0, rOF, ofTxt, text_color = cvdCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Pullback-Tiefe & Impuls-Leg-Zähler
@@ -1260,6 +1335,12 @@ if showTable and barstate.islast
         string pbTxt = na(pullbackPct) ? "Pullback –  ·  Leg " + str.tostring(legCount) : "Pullback " + str.tostring(pullbackPct, "#") + "%  ·  Leg " + str.tostring(legCount) + (inSweetSpot ? "  ·  Sweet Spot" : "")
         color pbCol = inSweetSpot ? (_chartTrend == 1 ? color.new(color.lime, 0) : color.new(color.red, 0)) : mutedCol
         table.cell(tbl, 0, rPB, pbTxt, text_color = pbCol, text_size = size.small, text_formatting = text.format_bold)
+
+    // Daily Bias: HTF-Trendrichtung + Ursprung (letzter CHoCH-Preis)
+    if showDailyBias
+        string biasTxt = na(dailyBiasPx) ? "Daily Bias: –" : "Daily Bias: " + (dailyBiasDir == 1 ? "Bullish" : "Bearish") + " seit CHoCH @ " + str.tostring(dailyBiasPx, format.mintick)
+        color biasCol = dailyBiasDir == 1 ? color.new(color.lime, 0) : dailyBiasDir == -1 ? color.new(color.red, 0) : mutedCol
+        table.cell(tbl, 0, rBias, biasTxt, text_color = biasCol, text_size = size.small, text_formatting = text.format_bold)
 
     // Setup statistics strip (running backtest of current settings)
     if showStatsRow
