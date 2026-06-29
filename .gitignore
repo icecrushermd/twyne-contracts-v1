@@ -21,6 +21,10 @@ _corpus/
 # System Files
 .DS_Store
 
+# Python
+__pycache__/
+*.pyc
+
 # Coverage directory
 coverage/
 *.info

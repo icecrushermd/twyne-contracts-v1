@@ -1,0 +1,97 @@
+//@version=5
+
+// =============================================================================
+// Dealer Gamma Levels - backtestable strategy
+//
+// Same manually-entered real-GEX levels as GEXR_Indicator.pine, but wired to
+// concrete, testable entry/exit rules so the level set can be evaluated in
+// TradingView's Strategy Tester before any live use. Original rule set
+// written for this project -- not a copy of any third-party system.
+//
+// Core idea: trade reclaims/losses of the zero-gamma (GEX Flip) level in the
+// direction the Pivot already confirms, target the opposing options wall,
+// and stop beyond the dealer positioning zone (or an ATR fallback).
+// =============================================================================
+
+strategy("Dealer Gamma Levels - Strategy", shorttitle = "DGL-Strat", overlay = true,
+     default_qty_type = strategy.fixed, default_qty_value = 1,
+     initial_capital = 10000, currency = currency.USD,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 0.0,
+     slippage = 1)
+
+// ---------------------------------------------------------------------------
+// Inputs: levels copied daily from gex_calculator.py output
+// ---------------------------------------------------------------------------
+g1 = "Daily Levels (from gex_calculator.py)"
+basisOffset  = input.float(0.0, "Basis Offset (cash index -> futures)", group = g1, step = 0.25)
+pivotLvl     = input.float(0.0, "Pivot",          group = g1, step = 0.25)
+gexFlipLvl   = input.float(0.0, "GEX Flip",       group = g1, step = 0.25)
+callWallLvl  = input.float(0.0, "Call Wall",      group = g1, step = 0.25)
+putWallLvl   = input.float(0.0, "Put Wall",       group = g1, step = 0.25)
+upperDpzHigh = input.float(0.0, "Upper DPZ High", group = g1, step = 0.25)
+lowerDpzLow  = input.float(0.0, "Lower DPZ Low",  group = g1, step = 0.25)
+
+g2 = "Rules"
+enableLongs   = input.bool(true,  "Enable Longs", group = g2)
+enableShorts  = input.bool(true,  "Enable Shorts", group = g2)
+useAtrStop    = input.bool(false, "Use ATR stop instead of DPZ stop", group = g2)
+atrLen        = input.int(14, "ATR Length", group = g2)
+atrMult       = input.float(1.5, "ATR Stop Multiplier", group = g2)
+requireCheckpoint = input.bool(true, "Only enter after session checkpoint", group = g2)
+checkpointHour    = input.int(10, "Checkpoint Hour (exchange time)", minval = 0, maxval = 23, group = g2)
+checkpointMin     = input.int(30, "Checkpoint Minute", minval = 0, maxval = 59, group = g2)
+
+g3 = "Session Filter"
+useSessionFilter = input.bool(false, "Restrict entries to time window", group = g3)
+sessionWindow     = input.session("0930-1600", "Entry Window (exchange time)", group = g3)
+
+// ---------------------------------------------------------------------------
+// Apply basis offset
+// ---------------------------------------------------------------------------
+pivot    = pivotLvl    + basisOffset
+gexFlip  = gexFlipLvl  + basisOffset
+callWall = callWallLvl + basisOffset
+putWall  = putWallLvl  + basisOffset
+dpzHigh  = upperDpzHigh + basisOffset
+dpzLow   = lowerDpzLow  + basisOffset
+
+levelsConfigured = pivot != 0.0 and gexFlip != 0.0
+
+plot(levelsConfigured ? pivot    : na, "Pivot",     color = color.new(color.yellow, 0))
+plot(levelsConfigured ? gexFlip  : na, "GEX Flip",  color = color.new(color.lime, 0), linewidth = 2)
+plot(levelsConfigured ? callWall : na, "Call Wall", color = color.new(color.red, 0))
+plot(levelsConfigured ? putWall  : na, "Put Wall",  color = color.new(color.red, 0))
+
+// ---------------------------------------------------------------------------
+// Filters
+// ---------------------------------------------------------------------------
+checkpointTime     = timestamp(year, month, dayofmonth, checkpointHour, checkpointMin)
+checkpointPassed   = not requireCheckpoint or time >= checkpointTime
+inSessionWindow    = not useSessionFilter or not na(time(timeframe.period, sessionWindow))
+
+atrVal = ta.atr(atrLen)
+
+// ---------------------------------------------------------------------------
+// Entry signals: reclaim/lose the zero-gamma level in the direction the
+// Pivot already agrees with.
+// ---------------------------------------------------------------------------
+longSignal  = levelsConfigured and ta.crossover(close, gexFlip)  and close > pivot and checkpointPassed and inSessionWindow
+shortSignal = levelsConfigured and ta.crossunder(close, gexFlip) and close < pivot and checkpointPassed and inSessionWindow
+
+longStop  = useAtrStop ? close - atrVal * atrMult : math.min(dpzLow,  pivot)
+shortStop = useAtrStop ? close + atrVal * atrMult : math.max(dpzHigh, pivot)
+
+if enableLongs and longSignal
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", "Long", limit = callWall, stop = longStop)
+
+if enableShorts and shortSignal
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", "Short", limit = putWall, stop = shortStop)
+
+// Safety net: flatten if price breaks back through the level that justified
+// the trade in the first place (regime invalidated before stop is hit).
+if strategy.position_size > 0 and close < gexFlip
+    strategy.close("Long", comment = "Flip lost")
+if strategy.position_size < 0 and close > gexFlip
+    strategy.close("Short", comment = "Flip reclaimed")

@@ -1,0 +1,168 @@
+//@version=5
+
+// =============================================================================
+// Dealer Gamma Levels (independent implementation)
+//
+// Plots a daily snapshot of real dealer-gamma-exposure levels (Pivot, GEX
+// Flip / zero-gamma, Call Wall, Put Wall, Max Pain, Dealer Positioning Zones,
+// Vol Trigger Up/Down) computed OFFLINE from a real options chain by the
+// companion gex_calculator.py script (Tradier API, greeks via ORATS).
+//
+// Pine Script cannot fetch an options chain itself, so the levels are entered
+// manually each session from the script's output. Everything below that —
+// the bias/path/regime commentary — is computed live from price action
+// against those levels, original logic written for this project.
+//
+// For an index whose options differ from the chart's instrument (e.g. NDX
+// options levels plotted on an NQ futures chart), use the Basis Offset input
+// to align the cash-index levels to the futures price scale.
+// =============================================================================
+
+indicator("Dealer Gamma Levels", shorttitle = "DGL", overlay = true, max_lines_count = 60, max_labels_count = 60, max_boxes_count = 10)
+
+// ---------------------------------------------------------------------------
+// Inputs: levels copied daily from gex_calculator.py output
+// ---------------------------------------------------------------------------
+g1 = "Daily Levels (from gex_calculator.py)"
+basisOffset   = input.float(0.0,     "Basis Offset (cash index -> futures)", group = g1, step = 0.25)
+pivotLvl      = input.float(0.0,     "Pivot",            group = g1, step = 0.25)
+gexFlipLvl    = input.float(0.0,     "GEX Flip",         group = g1, step = 0.25)
+callWallLvl   = input.float(0.0,     "Call Wall",        group = g1, step = 0.25)
+putWallLvl    = input.float(0.0,     "Put Wall",         group = g1, step = 0.25)
+maxPainLvl    = input.float(0.0,     "Max Pain",         group = g1, step = 0.25)
+upperDpzHigh  = input.float(0.0,     "Upper DPZ High",   group = g1, step = 0.25)
+lowerDpzLow   = input.float(0.0,     "Lower DPZ Low",    group = g1, step = 0.25)
+volTriggerUp  = input.float(0.0,     "Vol Trigger Up",   group = g1, step = 0.25)
+volTriggerDn  = input.float(0.0,     "Vol Trigger Down", group = g1, step = 0.25)
+netGexSign    = input.string("Positive (mean-reverting)", "Net GEX Regime", options = ["Positive (mean-reverting)", "Negative (trending)"], group = g1)
+
+g2 = "Display"
+showZones  = input.bool(true, "Show Dealer Positioning Zones", group = g2)
+showTable  = input.bool(true, "Show Status Table", group = g2)
+checkpointHour = input.int(10, "Session Checkpoint Hour (exchange time)", minval = 0, maxval = 23, group = g2)
+checkpointMin  = input.int(30, "Session Checkpoint Minute", minval = 0, maxval = 59, group = g2)
+
+// ---------------------------------------------------------------------------
+// Apply basis offset
+// ---------------------------------------------------------------------------
+pivot     = pivotLvl     + basisOffset
+gexFlip   = gexFlipLvl   + basisOffset
+callWall  = callWallLvl  + basisOffset
+putWall   = putWallLvl   + basisOffset
+maxPain   = maxPainLvl   + basisOffset
+upperDpzHi = upperDpzHigh + basisOffset
+lowerDpzLo = lowerDpzLow  + basisOffset
+volUp     = volTriggerUp + basisOffset
+volDn     = volTriggerDn + basisOffset
+
+levelsConfigured = pivot != 0.0 and gexFlip != 0.0
+
+// ---------------------------------------------------------------------------
+// Plots
+// ---------------------------------------------------------------------------
+plot(levelsConfigured ? pivot    : na, "Pivot",     color = color.new(color.yellow, 0),  linewidth = 1)
+plot(levelsConfigured ? gexFlip  : na, "GEX Flip",  color = color.new(color.lime, 0),    linewidth = 2)
+plot(levelsConfigured ? callWall : na, "Call Wall", color = color.new(color.red, 0),     linewidth = 1)
+plot(levelsConfigured ? putWall  : na, "Put Wall",  color = color.new(color.red, 0),     linewidth = 1)
+plot(levelsConfigured ? maxPain  : na, "Max Pain",  color = color.new(color.orange, 0),  linewidth = 1)
+plot(levelsConfigured ? volUp    : na, "Vol Trigger Up",   color = color.new(color.maroon, 0), linewidth = 1)
+plot(levelsConfigured ? volDn    : na, "Vol Trigger Down", color = color.new(color.maroon, 0), linewidth = 1)
+
+// Dealer Positioning Zones as shaded boxes extending to the right edge
+var box upperZoneBox = na
+var box lowerZoneBox = na
+
+if showZones and levelsConfigured
+    if na(upperZoneBox)
+        upperZoneBox := box.new(bar_index, upperDpzHi, bar_index, gexFlip, border_width = 0, bgcolor = color.new(color.green, 88), extend = extend.right)
+        lowerZoneBox := box.new(bar_index, gexFlip, bar_index, lowerDpzLo, border_width = 0, bgcolor = color.new(color.red, 88), extend = extend.right)
+    else
+        box.set_top(upperZoneBox, upperDpzHi)
+        box.set_bottom(upperZoneBox, gexFlip)
+        box.set_top(lowerZoneBox, gexFlip)
+        box.set_bottom(lowerZoneBox, lowerDpzLo)
+
+// Right-edge labels, redrawn only on the last bar to avoid clutter
+var label pivotLbl    = na
+var label gexFlipLbl  = na
+var label callWallLbl = na
+var label putWallLbl  = na
+var label maxPainLbl  = na
+var label volUpLbl    = na
+var label volDnLbl    = na
+
+f_labelAt(_id, _y, _txt, _col) =>
+    lbl = _id
+    if na(lbl)
+        lbl := label.new(bar_index, _y, _txt, xloc.bar_index, yloc.price, color.new(_col, 0), label.style_label_left, color.white, size.small)
+    else
+        label.set_xy(lbl, bar_index, _y)
+        label.set_text(lbl, _txt)
+    lbl
+
+if barstate.islast and levelsConfigured
+    pivotLbl    := f_labelAt(pivotLbl,    pivot,    "PIVOT " + str.tostring(pivot, "#.##"),        color.yellow)
+    gexFlipLbl  := f_labelAt(gexFlipLbl,  gexFlip,  "GEX FLIP " + str.tostring(gexFlip, "#.##"),   color.lime)
+    callWallLbl := f_labelAt(callWallLbl, callWall, "CALL WALL " + str.tostring(callWall, "#.##"), color.red)
+    putWallLbl  := f_labelAt(putWallLbl,  putWall,  "PUT WALL " + str.tostring(putWall, "#.##"),   color.red)
+    maxPainLbl  := f_labelAt(maxPainLbl,  maxPain,  "MAX PAIN " + str.tostring(maxPain, "#.##"),   color.orange)
+    volUpLbl    := f_labelAt(volUpLbl,    volUp,    "VOL TRIGGER UP " + str.tostring(volUp, "#.##"),     color.maroon)
+    volDnLbl    := f_labelAt(volDnLbl,    volDn,    "VOL TRIGGER DOWN " + str.tostring(volDn, "#.##"),   color.maroon)
+
+// ---------------------------------------------------------------------------
+// Live price-action commentary (original logic, derived from the manual
+// levels above + current session's OHLC) -- not copied from any 3rd party
+// ---------------------------------------------------------------------------
+isNewSession = session.isfirstbar
+var float sessionOpen = na
+if isNewSession
+    sessionOpen := open
+
+aboveGexFlip = close > gexFlip
+abovePivot   = close > pivot
+
+bias = aboveGexFlip and abovePivot ? "Bullish" : (not aboveGexFlip and not abovePivot ? "Bearish" : "Neutral")
+positiveGammaRegime = netGexSign == "Positive (mean-reverting)"
+
+openText = sessionOpen > pivot
+    ? "Opened above Pivot (" + str.tostring(pivot, "#.##") + "). Bulls started with the edge."
+    : "Opened below Pivot (" + str.tostring(pivot, "#.##") + "). Sellers started with the edge."
+
+actionText = aboveGexFlip
+    ? "Holding above GEX Flip (" + str.tostring(gexFlip, "#.##") + "). " + (positiveGammaRegime ? "Positive gamma regime intact." : "Negative gamma -- moves can extend fast.")
+    : "Holding below GEX Flip (" + str.tostring(gexFlip, "#.##") + "). " + (positiveGammaRegime ? "Positive gamma fading." : "Negative gamma regime -- downside can accelerate.")
+
+nextLevel  = bias == "Bullish" ? callWall : (bias == "Bearish" ? putWall : maxPain)
+nextLabel  = bias == "Bullish" ? "Call Wall" : (bias == "Bearish" ? "Put Wall" : "Max Pain")
+readText = "Bias " + bias + ". Next reference: " + nextLabel + " @ " + str.tostring(nextLevel, "#.##") + "."
+
+flipIfText = aboveGexFlip
+    ? "Close back below GEX Flip (" + str.tostring(gexFlip, "#.##") + ") flips structure bearish."
+    : "Close back above GEX Flip (" + str.tostring(gexFlip, "#.##") + ") flips structure bullish."
+
+checkpointTime = timestamp(year, month, dayofmonth, checkpointHour, checkpointMin)
+checkpointReached = time >= checkpointTime
+
+// ---------------------------------------------------------------------------
+// Status table
+// ---------------------------------------------------------------------------
+var table statusTable = na
+if showTable and na(statusTable)
+    statusTable := table.new(position.top_right, 2, 11, bgcolor = color.new(color.black, 10), border_width = 1, border_color = color.gray)
+
+f_row(_tbl, _row, _label, _value, _valColor) =>
+    table.cell(_tbl, 0, _row, _label, text_color = color.gray, text_size = size.small, text_halign = text.align_left)
+    table.cell(_tbl, 1, _row, _value, text_color = _valColor, text_size = size.small, text_halign = text.align_left)
+
+if showTable and levelsConfigured and barstate.islast
+    f_row(statusTable, 0, "Regime", positiveGammaRegime ? "Positive Gamma" : "Negative Gamma", positiveGammaRegime ? color.lime : color.red)
+    f_row(statusTable, 1, "Bias", bias, bias == "Bullish" ? color.lime : (bias == "Bearish" ? color.red : color.gray))
+    f_row(statusTable, 2, "Checkpoint", checkpointReached ? "Reached" : "Waiting", checkpointReached ? color.lime : color.orange)
+    f_row(statusTable, 3, "Open", openText, color.white)
+    f_row(statusTable, 4, "Action", actionText, color.white)
+    f_row(statusTable, 5, "Read", readText, color.white)
+    f_row(statusTable, 6, "Flip If", flipIfText, color.white)
+    f_row(statusTable, 7, "Pivot / GEX Flip", str.tostring(pivot, "#.##") + " / " + str.tostring(gexFlip, "#.##"), color.yellow)
+    f_row(statusTable, 8, "Put / Call Wall", str.tostring(putWall, "#.##") + " / " + str.tostring(callWall, "#.##"), color.red)
+    f_row(statusTable, 9, "Above Pivot / Flip", (abovePivot ? "Yes" : "No") + " / " + (aboveGexFlip ? "Yes" : "No"), color.white)
+    f_row(statusTable, 10, "Last Price", str.tostring(close, "#.##"), color.white)
