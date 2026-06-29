@@ -32,6 +32,11 @@ upperDpzHigh = input.float(0.0, "Upper DPZ High", group = g1, step = 0.25)
 lowerDpzLow  = input.float(0.0, "Lower DPZ Low",  group = g1, step = 0.25)
 
 g2 = "Rules"
+// Per the GEX framework, the right tactic depends on the gamma regime:
+//   Negative gamma -> trend day  -> trade GEX-Flip breakouts toward the wall
+//   Positive gamma -> chop day   -> fade the walls back toward GEX Flip
+regimeMode = input.string("Auto (by Net GEX)", "Tactic", options = ["Auto (by Net GEX)", "Force Trend (breakout)", "Force Mean-Reversion (fade walls)"], group = g2)
+netGexSign = input.string("Negative (trending)", "Net GEX Regime (from calculator)", options = ["Positive (mean-reverting)", "Negative (trending)"], group = g2)
 enableLongs   = input.bool(true,  "Enable Longs", group = g2)
 enableShorts  = input.bool(true,  "Enable Shorts", group = g2)
 useAtrStop    = input.bool(false, "Use ATR stop instead of DPZ stop", group = g2)
@@ -71,27 +76,51 @@ inSessionWindow    = not useSessionFilter or not na(time(timeframe.period, sessi
 
 atrVal = ta.atr(atrLen)
 
-// ---------------------------------------------------------------------------
-// Entry signals: reclaim/lose the zero-gamma level in the direction the
-// Pivot already agrees with.
-// ---------------------------------------------------------------------------
-longSignal  = levelsConfigured and ta.crossover(close, gexFlip)  and close > pivot and checkpointPassed and inSessionWindow
-shortSignal = levelsConfigured and ta.crossunder(close, gexFlip) and close < pivot and checkpointPassed and inSessionWindow
+// Resolve which tactic is active this session.
+autoTrend = netGexSign == "Negative (trending)"
+useTrend = regimeMode == "Force Trend (breakout)" or (regimeMode == "Auto (by Net GEX)" and autoTrend)
+useFade  = regimeMode == "Force Mean-Reversion (fade walls)" or (regimeMode == "Auto (by Net GEX)" and not autoTrend)
 
-longStop  = useAtrStop ? close - atrVal * atrMult : math.min(dpzLow,  pivot)
-shortStop = useAtrStop ? close + atrVal * atrMult : math.max(dpzHigh, pivot)
+baseFilter = levelsConfigured and checkpointPassed and inSessionWindow
+
+// ---------------------------------------------------------------------------
+// TREND tactic (negative gamma): reclaim/lose the zero-gamma level in the
+// direction the Pivot already agrees with, target the opposing wall.
+// ---------------------------------------------------------------------------
+trendLong  = useTrend and baseFilter and ta.crossover(close, gexFlip)  and close > pivot
+trendShort = useTrend and baseFilter and ta.crossunder(close, gexFlip) and close < pivot
+
+// ---------------------------------------------------------------------------
+// MEAN-REVERSION tactic (positive gamma): fade the walls back toward GEX
+// Flip. Sell into the Call Wall, buy into the Put Wall.
+// ---------------------------------------------------------------------------
+fadeLong  = useFade and baseFilter and ta.crossover(close, putWall)   // reclaim off the put wall
+fadeShort = useFade and baseFilter and ta.crossunder(close, callWall) // rejection off the call wall
+
+longSignal  = trendLong or fadeLong
+shortSignal = trendShort or fadeShort
+
+// Stops/targets differ by tactic.
+trendLongStop  = useAtrStop ? close - atrVal * atrMult : math.min(dpzLow,  pivot)
+trendShortStop = useAtrStop ? close + atrVal * atrMult : math.max(dpzHigh, pivot)
 
 if enableLongs and longSignal
     strategy.entry("Long", strategy.long)
-    strategy.exit("Long Exit", "Long", limit = callWall, stop = longStop)
+    if trendLong
+        strategy.exit("Long Exit", "Long", limit = callWall, stop = trendLongStop)
+    else
+        strategy.exit("Long Exit", "Long", limit = gexFlip, stop = putWall - atrVal * atrMult)
 
 if enableShorts and shortSignal
     strategy.entry("Short", strategy.short)
-    strategy.exit("Short Exit", "Short", limit = putWall, stop = shortStop)
+    if trendShort
+        strategy.exit("Short Exit", "Short", limit = putWall, stop = trendShortStop)
+    else
+        strategy.exit("Short Exit", "Short", limit = gexFlip, stop = callWall + atrVal * atrMult)
 
-// Safety net: flatten if price breaks back through the level that justified
-// the trade in the first place (regime invalidated before stop is hit).
-if strategy.position_size > 0 and close < gexFlip
+// Safety net (trend only): flatten if price breaks back through the GEX Flip
+// that justified the breakout before the stop is hit.
+if useTrend and strategy.position_size > 0 and close < gexFlip
     strategy.close("Long", comment = "Flip lost")
-if strategy.position_size < 0 and close > gexFlip
+if useTrend and strategy.position_size < 0 and close > gexFlip
     strategy.close("Short", comment = "Flip reclaimed")

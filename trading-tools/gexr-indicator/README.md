@@ -75,6 +75,28 @@ For each contract in the nearest N expiries (`--max-expiries`, default 4):
 None of this requires a paid data feed. It does require an options chain
 with real OI + greeks, which is the part Tradier provides for free.
 
+## GEX is a behaviour framework, not a direction signal
+
+This is the most important idea and it drives the strategy logic. GEX tells
+you whether dealer hedging is likely to **dampen or amplify** moves — it
+does *not* tell you up vs down:
+
+| Regime (vs Zero Gamma) | Dealer hedging | Expected behaviour | Tactic |
+|---|---|---|---|
+| **Positive gamma** (above) | sell rallies, buy dips | chop, mean reversion, lower vol | **fade the walls** back to Flip |
+| **Negative gamma** (below) | buy rallies, sell dips | trend days, higher vol | **trade breakouts** to the wall |
+| **Zero gamma** (near Flip) | hedging can flip | regime change, indecision | stand aside / low conviction |
+
+GEX works best with high open interest on index products (SPY/QQQ/IWM) and
+during OpEx weeks / volatility-regime transitions. It is less reliable in
+thin liquidity, around major macro news, or on illiquid single names.
+
+The Pine strategy encodes this directly: in **Auto** mode it reads the
+`Net GEX Regime` value from the calculator and trades breakouts in negative
+gamma but fades the walls in positive gamma. You can also force either
+tactic. The indicator's status table shows the live "Expected Behaviour"
+read so you can see which regime you're in at a glance.
+
 ## Setup
 
 1. Sign up for a free Tradier Brokerage account and create an API token:

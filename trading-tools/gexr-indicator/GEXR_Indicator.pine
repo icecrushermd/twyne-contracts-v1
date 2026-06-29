@@ -140,6 +140,19 @@ flipIfText = aboveGexFlip
     ? "Close back below GEX Flip (" + str.tostring(gexFlip, "#.##") + ") flips structure bearish."
     : "Close back above GEX Flip (" + str.tostring(gexFlip, "#.##") + ") flips structure bullish."
 
+// Expected market BEHAVIOUR (not direction), per standard GEX framework:
+//   positive gamma  -> dealers sell rallies / buy dips -> chop, mean reversion
+//   negative gamma  -> dealers buy rallies / sell dips -> trend, higher vol
+//   near zero gamma -> hedging can flip -> chop / regime change
+atrProxy = ta.atr(14)
+distToFlip = math.abs(close - gexFlip)
+nearZeroGamma = distToFlip <= atrProxy
+behaviourText = nearZeroGamma
+    ? "Near Zero Gamma -> chop / potential regime change. Lower conviction."
+    : (positiveGammaRegime
+        ? "Positive gamma -> expect mean reversion, fade extremes toward walls."
+        : "Negative gamma -> expect trend & follow-through, breakouts can run.")
+
 checkpointTime = timestamp(year, month, dayofmonth, checkpointHour, checkpointMin)
 checkpointReached = time >= checkpointTime
 
@@ -148,7 +161,7 @@ checkpointReached = time >= checkpointTime
 // ---------------------------------------------------------------------------
 var table statusTable = na
 if showTable and na(statusTable)
-    statusTable := table.new(position.top_right, 2, 11, bgcolor = color.new(color.black, 10), border_width = 1, border_color = color.gray)
+    statusTable := table.new(position.top_right, 2, 12, bgcolor = color.new(color.black, 10), border_width = 1, border_color = color.gray)
 
 f_row(_tbl, _row, _label, _value, _valColor) =>
     table.cell(_tbl, 0, _row, _label, text_color = color.gray, text_size = size.small, text_halign = text.align_left)
@@ -157,12 +170,13 @@ f_row(_tbl, _row, _label, _value, _valColor) =>
 if showTable and levelsConfigured and barstate.islast
     f_row(statusTable, 0, "Regime", positiveGammaRegime ? "Positive Gamma" : "Negative Gamma", positiveGammaRegime ? color.lime : color.red)
     f_row(statusTable, 1, "Bias", bias, bias == "Bullish" ? color.lime : (bias == "Bearish" ? color.red : color.gray))
-    f_row(statusTable, 2, "Checkpoint", checkpointReached ? "Reached" : "Waiting", checkpointReached ? color.lime : color.orange)
-    f_row(statusTable, 3, "Open", openText, color.white)
-    f_row(statusTable, 4, "Action", actionText, color.white)
-    f_row(statusTable, 5, "Read", readText, color.white)
-    f_row(statusTable, 6, "Flip If", flipIfText, color.white)
-    f_row(statusTable, 7, "Pivot / GEX Flip", str.tostring(pivot, "#.##") + " / " + str.tostring(gexFlip, "#.##"), color.yellow)
-    f_row(statusTable, 8, "Put / Call Wall", str.tostring(putWall, "#.##") + " / " + str.tostring(callWall, "#.##"), color.red)
-    f_row(statusTable, 9, "Above Pivot / Flip", (abovePivot ? "Yes" : "No") + " / " + (aboveGexFlip ? "Yes" : "No"), color.white)
-    f_row(statusTable, 10, "Last Price", str.tostring(close, "#.##"), color.white)
+    f_row(statusTable, 2, "Expected Behaviour", behaviourText, nearZeroGamma ? color.orange : (positiveGammaRegime ? color.aqua : color.fuchsia))
+    f_row(statusTable, 3, "Checkpoint", checkpointReached ? "Reached" : "Waiting", checkpointReached ? color.lime : color.orange)
+    f_row(statusTable, 4, "Open", openText, color.white)
+    f_row(statusTable, 5, "Action", actionText, color.white)
+    f_row(statusTable, 6, "Read", readText, color.white)
+    f_row(statusTable, 7, "Flip If", flipIfText, color.white)
+    f_row(statusTable, 8, "Pivot / GEX Flip", str.tostring(pivot, "#.##") + " / " + str.tostring(gexFlip, "#.##"), color.yellow)
+    f_row(statusTable, 9, "Put / Call Wall", str.tostring(putWall, "#.##") + " / " + str.tostring(callWall, "#.##"), color.red)
+    f_row(statusTable, 10, "Above Pivot / Flip", (abovePivot ? "Yes" : "No") + " / " + (aboveGexFlip ? "Yes" : "No"), color.white)
+    f_row(statusTable, 11, "Last Price", str.tostring(close, "#.##"), color.white)
