@@ -301,12 +301,32 @@ Regime          = {levels.regime}
 """.strip()
 
 
+def pine_csv_line(levels: GexLevels, basis_offset: float = 0.0) -> str:
+    """One-line CSV for the indicator's Easy Mode paste field.
+    Order: offset,pivot,gexFlip,callWall,putWall,maxPain,upperDpz,lowerDpz,volUp,volDn,regime"""
+    regime = "P" if levels.net_gex_total > 0 else "N"
+    return ",".join(str(x) for x in [
+        basis_offset,
+        levels.pivot,
+        levels.gex_flip,
+        levels.call_wall,
+        levels.put_wall,
+        levels.max_pain,
+        levels.upper_dpz_high,
+        levels.lower_dpz_low,
+        levels.vol_trigger_up,
+        levels.vol_trigger_down,
+        regime,
+    ])
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compute real dealer GEX levels from Tradier options data.")
     parser.add_argument("--symbol", required=True, help="Underlying symbol, e.g. SPX, SPY, NDX, QQQ")
     parser.add_argument("--max-expiries", type=int, default=4, help="Number of nearest expiries to aggregate")
     parser.add_argument("--sandbox", action="store_true", help="Use Tradier sandbox endpoint")
     parser.add_argument("--out", default=None, help="Write JSON output to this path")
+    parser.add_argument("--basis-offset", type=float, default=0.0, help="Cash-index -> futures offset for the CSV line")
     args = parser.parse_args()
 
     token = os.environ.get("TRADIER_API_TOKEN")
@@ -329,6 +349,9 @@ def main():
     print(json.dumps(asdict(levels), indent=2))
     print()
     print(pine_input_block(levels))
+    print()
+    print("=== EASY MODE: copy this ONE line into the indicator's 'Paste Levels (CSV)' field ===")
+    print(pine_csv_line(levels, args.basis_offset))
 
     if args.out:
         with open(args.out, "w") as f:

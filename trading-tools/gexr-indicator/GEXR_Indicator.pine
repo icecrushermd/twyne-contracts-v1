@@ -23,18 +23,48 @@ indicator("Dealer Gamma Levels", shorttitle = "DGL", overlay = true, max_lines_c
 // ---------------------------------------------------------------------------
 // Inputs: levels copied daily from gex_calculator.py output
 // ---------------------------------------------------------------------------
-g1 = "Daily Levels (from gex_calculator.py)"
-basisOffset   = input.float(0.0,     "Basis Offset (cash index -> futures)", group = g1, step = 0.25)
-pivotLvl      = input.float(0.0,     "Pivot",            group = g1, step = 0.25)
-gexFlipLvl    = input.float(0.0,     "GEX Flip",         group = g1, step = 0.25)
-callWallLvl   = input.float(0.0,     "Call Wall",        group = g1, step = 0.25)
-putWallLvl    = input.float(0.0,     "Put Wall",         group = g1, step = 0.25)
-maxPainLvl    = input.float(0.0,     "Max Pain",         group = g1, step = 0.25)
-upperDpzHigh  = input.float(0.0,     "Upper DPZ High",   group = g1, step = 0.25)
-lowerDpzLow   = input.float(0.0,     "Lower DPZ Low",    group = g1, step = 0.25)
-volTriggerUp  = input.float(0.0,     "Vol Trigger Up",   group = g1, step = 0.25)
-volTriggerDn  = input.float(0.0,     "Vol Trigger Down", group = g1, step = 0.25)
-netGexSign    = input.string("Positive (mean-reverting)", "Net GEX Regime", options = ["Positive (mean-reverting)", "Negative (trending)"], group = g1)
+// ---------------------------------------------------------------------------
+// EASY MODE: paste one CSV line from gex_calculator.py into a single field.
+// Order: offset,pivot,gexFlip,callWall,putWall,maxPain,upperDpz,lowerDpz,volUp,volDn,regime
+//   regime = P (positive/mean-reverting) or N (negative/trending)
+// If this field is non-empty it OVERRIDES all the individual fields below.
+// ---------------------------------------------------------------------------
+g0 = "Easy Mode (paste one line)"
+csvLevels = input.string("", "Paste Levels (CSV)", group = g0,
+     tooltip = "offset,pivot,gexFlip,callWall,putWall,maxPain,upperDpz,lowerDpz,volUp,volDn,regime(P/N)")
+
+g1 = "Manual Levels (used only if Easy Mode is empty)"
+basisOffsetIn = input.float(0.0,     "Basis Offset (cash index -> futures)", group = g1, step = 0.25)
+pivotIn       = input.float(0.0,     "Pivot",            group = g1, step = 0.25)
+gexFlipIn     = input.float(0.0,     "GEX Flip",         group = g1, step = 0.25)
+callWallIn    = input.float(0.0,     "Call Wall",        group = g1, step = 0.25)
+putWallIn     = input.float(0.0,     "Put Wall",         group = g1, step = 0.25)
+maxPainIn     = input.float(0.0,     "Max Pain",         group = g1, step = 0.25)
+upperDpzIn    = input.float(0.0,     "Upper DPZ High",   group = g1, step = 0.25)
+lowerDpzIn    = input.float(0.0,     "Lower DPZ Low",    group = g1, step = 0.25)
+volUpIn       = input.float(0.0,     "Vol Trigger Up",   group = g1, step = 0.25)
+volDnIn       = input.float(0.0,     "Vol Trigger Down", group = g1, step = 0.25)
+regimeIn      = input.string("Positive (mean-reverting)", "Net GEX Regime", options = ["Positive (mean-reverting)", "Negative (trending)"], group = g1)
+
+// Parse the CSV line if provided; otherwise fall back to the manual inputs.
+f_csvNum(_arr, _i) =>
+    array.size(_arr) > _i ? nz(str.tonumber(str.trim(array.get(_arr, _i)))) : na
+
+useCsv = str.length(str.trim(csvLevels)) > 0
+parts = useCsv ? str.split(csvLevels, ",") : array.new_string(0)
+
+basisOffset  = useCsv ? f_csvNum(parts, 0)  : basisOffsetIn
+pivotLvl     = useCsv ? f_csvNum(parts, 1)  : pivotIn
+gexFlipLvl   = useCsv ? f_csvNum(parts, 2)  : gexFlipIn
+callWallLvl  = useCsv ? f_csvNum(parts, 3)  : callWallIn
+putWallLvl   = useCsv ? f_csvNum(parts, 4)  : putWallIn
+maxPainLvl   = useCsv ? f_csvNum(parts, 5)  : maxPainIn
+upperDpzHigh = useCsv ? f_csvNum(parts, 6)  : upperDpzIn
+lowerDpzLow  = useCsv ? f_csvNum(parts, 7)  : lowerDpzIn
+volTriggerUp = useCsv ? f_csvNum(parts, 8)  : volUpIn
+volTriggerDn = useCsv ? f_csvNum(parts, 9)  : volDnIn
+regimeRaw    = useCsv and array.size(parts) > 10 ? str.trim(array.get(parts, 10)) : ""
+netGexSign   = useCsv ? (str.contains(str.upper(regimeRaw), "N") ? "Negative (trending)" : "Positive (mean-reverting)") : regimeIn
 
 g2 = "Display"
 showZones  = input.bool(true, "Show Dealer Positioning Zones", group = g2)
