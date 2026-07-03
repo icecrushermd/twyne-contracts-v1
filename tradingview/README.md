@@ -58,18 +58,31 @@ Futures-Modus rechnet sie automatisch auf deinen Chart um (über das
 Vortagesschluss-Verhältnis, das die Futures-Basis gleich mit erfasst).
 Micros (MES/MNQ) sind datenidentisch zu ES/NQ.
 
-**Setup für ES / MES:**
-1. In den Einstellungen: **"Level von Referenz-Symbol umrechnen"** ✓
-2. Referenz-Symbol: `AMEX:SPY` (Standard)
-3. Level holen: `python3 fetch_gex_levels.py SPY` — Werte in SPY-Preisen
-   eintragen (z.B. 680, nicht 6800); die Skalierung macht der Indikator
+**Symbol-Automatik (Standard: an):** Der Indikator erkennt das
+Chart-Symbol am Root (inkl. Micros) und stellt Referenz-Symbol und
+IV-Indizes selbst um — kein Umschalten beim Wechsel zwischen Charts:
 
-**Setup für NQ / MNQ:**
-1. **"Level von Referenz-Symbol umrechnen"** ✓
-2. Referenz-Symbol: `NASDAQ:QQQ`
-3. IV-Index kurzfristig auf `CBOE:VXN` stellen (Nasdaq-Vola statt VIX)
-4. Level holen: `python3 fetch_gex_levels.py QQQ` — Werte in QQQ-Preisen
-   eintragen
+| Chart | Referenz | IV-Index |
+|---|---|---|
+| ES / MES | SPY | VIX1D / VIX |
+| NQ / MNQ | QQQ | VXN |
+| RTY / M2K | IWM | RVX |
+| YM / MYM | DIA | VXD |
+
+Manuelle Level haben **eigene Eingabe-Blöcke pro Markt**: "Options-Level
+ES/MES" (in SPY-Preisen) und "Options-Level NQ/MNQ" (in QQQ-Preisen).
+Beide morgens füllen, dann beliebig zwischen ES- und NQ-Chart springen —
+es greift automatisch der richtige Satz. Der Fetcher schreibt mit
+`--patch` selbst in den passenden Block:
+
+```
+python3 fetch_gex_levels.py SPY --patch GEXR_Style_Matrix.pine
+python3 fetch_gex_levels.py QQQ --patch GEXR_Style_Matrix.pine
+```
+
+Danach einmal den Dateiinhalt in den Pine Editor kopieren — beide Märkte
+sind versorgt. Bei anderen Symbolen (GLD, IBIT, Aktien …) gilt der Block
+"Options-Level andere Symbole" plus die manuellen Referenz-Einstellungen.
 
 **"Session/ORZ ab US-Cash-Open (09:30 NY)"** sollte für Futures aktiv
 bleiben: Szenario-Engine, Opening Range und Dealer-Zonen starten dann mit

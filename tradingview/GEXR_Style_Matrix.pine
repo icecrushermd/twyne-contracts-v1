@@ -26,7 +26,25 @@ indicator("GEXR-Style Matrix PRO", shorttitle="GEXR-Style", overlay=true,
      max_labels_count=200, max_lines_count=200, max_boxes_count=100)
 
 // ─────────────────────────── Inputs ───────────────────────────
-grpO = "Options-Level (manuell · 0 = automatische Quelle)"
+grpES = "Options-Level ES/MES (in SPY-Preisen · 0 = auto)"
+esMaxPain = input.float(0.0, "ES Max Pain",       minval=0, group=grpES)
+esGexFlip = input.float(0.0, "ES GEX Flip",       minval=0, group=grpES)
+esCall    = input.float(0.0, "ES Call Wall",      minval=0, group=grpES)
+esPut     = input.float(0.0, "ES Put Wall",       minval=0, group=grpES)
+esVU      = input.float(0.0, "ES VU",             minval=0, group=grpES)
+esVD      = input.float(0.0, "ES VD",             minval=0, group=grpES)
+esAbs     = input.float(0.0, "ES Abs GEX Strike", minval=0, group=grpES)
+
+grpNQ = "Options-Level NQ/MNQ (in QQQ-Preisen · 0 = auto)"
+nqMaxPain = input.float(0.0, "NQ Max Pain",       minval=0, group=grpNQ)
+nqGexFlip = input.float(0.0, "NQ GEX Flip",       minval=0, group=grpNQ)
+nqCall    = input.float(0.0, "NQ Call Wall",      minval=0, group=grpNQ)
+nqPut     = input.float(0.0, "NQ Put Wall",       minval=0, group=grpNQ)
+nqVU      = input.float(0.0, "NQ VU",             minval=0, group=grpNQ)
+nqVD      = input.float(0.0, "NQ VD",             minval=0, group=grpNQ)
+nqAbs     = input.float(0.0, "NQ Abs GEX Strike", minval=0, group=grpNQ)
+
+grpO = "Options-Level andere Symbole (Referenz-Preise · 0 = auto)"
 inMaxPain = input.float(0.0, "Max Pain",         minval=0, group=grpO)
 inGexFlip = input.float(0.0, "GEX Flip",         minval=0, group=grpO)
 inPivot   = input.float(0.0, "Dealer Pivot",     minval=0, group=grpO)
@@ -45,6 +63,7 @@ pccSym       = input.symbol("USI:PCC",    "Put/Call-Ratio", group=grpC)
 strikeStepIn = input.float(0.0, "Strike-Raster (0 = automatisch)", minval=0, step=0.5, group=grpC)
 
 grpF = "Futures-Modus (ES/NQ/MES/MNQ)"
+autoSym = input.bool(true, "Symbol-Automatik (ES/NQ/RTY/YM erkennen)", group=grpF, tooltip="Erkennt das Chart-Symbol (inkl. Micros) und stellt alles selbst um: ES/MES→SPY+VIX1D/VIX · NQ/MNQ→QQQ+VXN · RTY/M2K→IWM+RVX · YM/MYM→DIA+VXD. Manuelle Level kommen dann aus dem passenden ES- bzw. NQ-Block oben. Bei anderen Symbolen gelten die Einstellungen unten.")
 useRef = input.bool(false, "Level von Referenz-Symbol umrechnen", group=grpF, tooltip="ES/MES: Referenz AMEX:SPY, Fetcher-Aufruf 'SPY'. NQ/MNQ: Referenz NASDAQ:QQQ, Fetcher 'QQQ', IV-Index auf CBOE:VXN stellen. Manuelle Options-Level dann in Referenz-Preisen eintragen (z.B. SPY 680 statt ES 6800). Umrechnung über das Vortagesschluss-Verhältnis — inkl. Futures-Basis.")
 refSym = input.symbol("AMEX:SPY", "Referenz-Symbol", group=grpF)
 useRTH = input.bool(true, "Session/ORZ ab US-Cash-Open (09:30 NY)", group=grpF, tooltip="Szenario-Engine, DPZ und Opening Range starten um 09:30 New York statt zur Globex-Eröffnung. Auf Aktien-Charts identisch mit dem Sessionstart.")
@@ -70,6 +89,28 @@ showRibbon  = input.bool(true, "Trend-Ribbon anzeigen", group=grpV)
 shadeCorr   = input.bool(false, "Gamma-Korridor einfärben", group=grpV)
 panelPos    = input.string("Oben rechts", "Panel-Position", options=["Oben rechts", "Unten rechts", "Oben links"], group=grpV)
 
+// ─────────────── Symbol-Automatik (ES/NQ/RTY/YM inkl. Micros) ───────────────
+root  = syminfo.root
+isES  = root == "ES"  or root == "MES"
+isNQ  = root == "NQ"  or root == "MNQ"
+isRTY = root == "RTY" or root == "M2K"
+isYM  = root == "YM"  or root == "MYM"
+autoDetected = autoSym and (isES or isNQ or isRTY or isYM)
+
+effRefSym  = autoDetected ? (isNQ ? "NASDAQ:QQQ" : isRTY ? "AMEX:IWM" : isYM ? "AMEX:DIA" : "AMEX:SPY") : refSym
+effVolSym  = autoDetected ? (isNQ ? "CBOE:VXN" : isRTY ? "CBOE:RVX" : isYM ? "CBOE:VXD" : "CBOE:VIX1D") : volSym
+effVol0Sym = autoDetected ? (isNQ ? "CBOE:VXN" : isRTY ? "CBOE:RVX" : isYM ? "CBOE:VXD" : "CBOE:VIX")   : vol0Sym
+effUseRef  = autoDetected or useRef
+
+// Manuelle Level: ES- und NQ-Charts nutzen ihren eigenen Eingabe-Block
+mMaxPain = autoDetected and isES ? esMaxPain : autoDetected and isNQ ? nqMaxPain : inMaxPain
+mGexFlip = autoDetected and isES ? esGexFlip : autoDetected and isNQ ? nqGexFlip : inGexFlip
+mCall    = autoDetected and isES ? esCall    : autoDetected and isNQ ? nqCall    : inCall
+mPut     = autoDetected and isES ? esPut     : autoDetected and isNQ ? nqPut     : inPut
+mVU      = autoDetected and isES ? esVU      : autoDetected and isNQ ? nqVU      : inVU
+mVD      = autoDetected and isES ? esVD      : autoDetected and isNQ ? nqVD      : inVD
+mAbsGex  = autoDetected and isES ? esAbs     : autoDetected and isNQ ? nqAbs     : inAbsGex
+
 // ─────────────────────── Basis-Daten ───────────────────────
 f_fmt(_x) => str.tostring(_x, format.mintick)
 
@@ -85,8 +126,8 @@ htf = timeframe.isintraday ? "D" : "W"
 sma5D = request.security(syminfo.tickerid, "D", ta.sma(close, 5)[1], lookahead=barmerge.lookahead_on)
 
 // Referenz-Symbol (Futures-Modus): Vortagesschluss für die Umrechnung
-refC    = request.security(refSym, "D", close[1],             lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
-refSma5 = request.security(refSym, "D", ta.sma(close, 5)[1],  lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+refC    = request.security(effRefSym, "D", close[1],             lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+refSma5 = request.security(effRefSym, "D", ta.sma(close, 5)[1],  lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 
 // Session-Tracking (wahlweise ab US-Cash-Open 09:30 NY — wichtig für Futures)
 newSes = ta.change(time("D")) != 0
@@ -117,8 +158,8 @@ else if time - sesStart < orMinutes * 60 * 1000
     orL := math.min(orL, low)
 
 // ─────────────── CBOE-Optionsdaten (Vortagesschluss → heute fix) ───────────────
-iv1  = request.security(volSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
-iv0  = request.security(vol0Sym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+iv1  = request.security(effVolSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+iv0  = request.security(effVol0Sym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 skew = request.security(skewSym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 pcc  = request.security(pccSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 
@@ -126,7 +167,7 @@ ivDay = nz(iv1, iv0)                       // annualisierte IV in %
 
 // Futures-Modus: Level entstehen im Referenz-Optionsmarkt (SPY/QQQ) und
 // werden über das Vortagesschluss-Verhältnis auf den Chart skaliert
-convOk = useRef and not na(refC) and refC > 0 and not na(pdC)
+convOk = effUseRef and not na(refC) and refC > 0 and not na(pdC)
 conv   = convOk ? pdC / refC : 1.0
 basePx = convOk ? refC : pdC               // Preisbasis im Referenz-Raum
 
@@ -168,12 +209,12 @@ sigma = ta.stdev(src, lenAnchor)
 // der Pivot ist Preisstruktur des Charts selbst und bleibt chart-nativ
 f_lvl(_manual, _cboe, _stat) => _manual > 0 ? _manual * conv : useCboe ? _cboe * conv : _stat
 
-gexL   = f_lvl(inGexFlip, cboeGex,  flow)
-callL  = f_lvl(inCall,    cboeCall, flow + 2 * sigma)
-putL   = f_lvl(inPut,     cboePut,  flow - 2 * sigma)
-vuL    = f_lvl(inVU,      cboeVU,   flow + 3 * sigma)
-vdL    = f_lvl(inVD,      cboeVD,   flow - 3 * sigma)
-painL  = f_lvl(inMaxPain, cboePain, ta.sma(src, lenAnchor))
+gexL   = f_lvl(mGexFlip, cboeGex,  flow)
+callL  = f_lvl(mCall,    cboeCall, flow + 2 * sigma)
+putL   = f_lvl(mPut,     cboePut,  flow - 2 * sigma)
+vuL    = f_lvl(mVU,      cboeVU,   flow + 3 * sigma)
+vdL    = f_lvl(mVD,      cboeVD,   flow - 3 * sigma)
+painL  = f_lvl(mMaxPain, cboePain, ta.sma(src, lenAnchor))
 pivotL = inPivot > 0 ? inPivot * conv : math.round_to_mintick((pdH + pdL + pdC) / 3)
 
 // Abgeleitete Level (interne Benchmarks wie UDL/LDL im Original)
@@ -223,8 +264,8 @@ if src <= gexL and src >= vdL
     dnDen += vol
 upperDPZ = upDen > 0 ? upNum / upDen : math.avg(gexL, vuL)
 lowerDPZ = dnDen > 0 ? dnNum / dnDen : math.avg(gexL, vdL)
-absGexL  = inAbsGex > 0 ? inAbsGex * conv : posGamma ? callL : putL
-absGexTx = (inAbsGex > 0 ? (inAbsGex >= gexL ? "CALL" : "PUT") : posGamma ? "CALL" : "PUT") + " @ " + f_fmt(absGexL)
+absGexL  = mAbsGex > 0 ? mAbsGex * conv : posGamma ? callL : putL
+absGexTx = (mAbsGex > 0 ? (absGexL >= gexL ? "CALL" : "PUT") : posGamma ? "CALL" : "PUT") + " @ " + f_fmt(absGexL)
 
 // ─────────────────────── Signale ───────────────────────
 longRaw  = posGamma and ribbonUp and rsi > 50 and (ta.crossover(close, udl) or ta.crossover(close, gexL))
@@ -322,7 +363,7 @@ txtLevels = "PV " + chk(abovePivot) + "  GX " + chk(posGamma) + "  PUT " + chk(c
 modeTx = (adxV > 25 ? "Trending" : "Balanced") + " · ATR " + (volaTx == "Loud" ? "Expanded" : volaTx == "Quiet" ? "Compressed" : "Balanced")
 srcTx = useCboe ?
      "IV " + str.tostring(ivDay, "0.0") + " · EM ±" + f_fmt(em1) + " · SKEW " + str.tostring(nz(skew, 0), "0") + " · P/C " + str.tostring(nz(pcc, 1), "0.00") +
-     (convOk ? "\nRef-Umrechnung ×" + str.tostring(conv, "0.0000") : "") :
+     (convOk ? "\nRef-Umrechnung ×" + str.tostring(conv, "0.0000") + (autoDetected ? " · Auto-Profil " + root : "") : "") :
      "Statistik-Modus (keine Optionsdaten)"
 
 // ─────────────────────── Matrix-Panel ───────────────────────

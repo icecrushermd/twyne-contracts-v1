@@ -136,7 +136,7 @@ def compute_levels(spot: float, options: list):
     }
 
 
-PATCH_MAP = {  # Indikator-Inputname → Level-Schlüssel
+BASE_PATCH_MAP = {  # Indikator-Inputname → Level-Schlüssel
     "Max Pain": "max_pain",
     "GEX Flip": "gex_flip",
     "Call Wall": "call_wall",
@@ -145,10 +145,17 @@ PATCH_MAP = {  # Indikator-Inputname → Level-Schlüssel
 }
 
 
-def patch_pine(path: str, levels: dict) -> None:
+def patch_map_for(symbol: str) -> dict:
+    """SPY/SPX-Level gehören in den ES-Block, QQQ/NDX in den NQ-Block."""
+    s = symbol.upper().lstrip("_")
+    prefix = "ES " if s in ("SPY", "SPX", "XSP") else "NQ " if s in ("QQQ", "NDX") else ""
+    return {prefix + name: key for name, key in BASE_PATCH_MAP.items()}
+
+
+def patch_pine(path: str, levels: dict, symbol: str) -> None:
     with open(path, encoding="utf-8") as f:
         src = f.read()
-    for name, key in PATCH_MAP.items():
+    for name, key in patch_map_for(symbol).items():
         val = levels.get(key)
         if val is None:
             continue
@@ -188,7 +195,7 @@ def main() -> None:
     print("  (Pivot/VU/VD auf 0 lassen = automatisch)")
 
     if args.patch:
-        patch_pine(args.patch, lv)
+        patch_pine(args.patch, lv, args.symbol)
 
 
 if __name__ == "__main__":
