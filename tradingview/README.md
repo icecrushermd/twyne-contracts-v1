@@ -27,12 +27,29 @@ SpotGamma, unusualwhales) in den Indikator-Einstellungen unter
 | VU / VD | Volatilitäts-Trigger oben/unten (Korridor-Ränder) |
 | Abs GEX Strike | Strike mit dem größten absoluten GEX |
 
-### Auto-Modus
+### Auto-Modus: CBOE-Optionsdaten (Standard)
 
-Felder, die auf **0** stehen, werden automatisch als statistischer Proxy
-berechnet (volumengewichteter Flow-Anker ± Sigma-Bänder, klassischer
-Tagespivot). So funktioniert der Indikator auch ganz ohne manuelle Eingabe —
-das kann das Original nicht.
+Felder, die auf **0** stehen, werden automatisch berechnet — standardmäßig
+aus echten CBOE-Optionsmarktdaten, genau wie es das Original macht:
+
+- **VIX1D / VIX** → Expected Move: `Preis × IV/100 × √(t/252)` →
+  Call/Put Wall (±1-Tages-EM) und VD/VU-Korridor (5-Tages-EM)
+- **SKEW-Index** → Asymmetrie: hoher Skew schiebt die Downside-Level
+  weiter nach unten (mehr OTM-Put-Nachfrage)
+- **Put/Call-Ratio (USI:PCC)** → Positionierungs-Bias verschiebt den
+  GEX-Flip-Proxy
+- Alle Level werden aufs **Strike-Raster gerundet** (automatisch nach
+  Preisniveau, z.B. 2.5er-Schritte bei SPY) und basieren auf den
+  **Vortagesschlusskursen** der Indizes — sie stehen damit ab der
+  Eröffnung fest, wandern intraday nicht und repainten nicht
+
+Für Nicht-US-Index-Symbole (Einzelaktien, Krypto) die IV-Index-Symbole
+anpassen (z.B. `CBOE:VXN` für NDX/QQQ, `CBOE:VXAPL` für Apple) oder auf
+**"Statistisch (Preis/Volumen)"** umschalten — dann werden volumengewichtete
+Sigma-Bänder als Proxy genutzt. Das Panel zeigt unter **"Options:"** immer
+an, welche Quelle gerade aktiv ist (IV, EM, SKEW, P/C-Werte live).
+
+**Level-Priorität:** manuell eingetragen → CBOE-Daten → Statistik.
 
 ## Komponenten
 

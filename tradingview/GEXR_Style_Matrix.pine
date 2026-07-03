@@ -6,27 +6,27 @@
 //   1. Level-Matrix    : Max Pain, GEX Flip, Dealer Pivot, Call/Put Wall,
 //                        Vola-Korridor (VD/VU), abgeleitete UDL/LDL-Level,
 //                        Opening-Range-Zone (ORZ)
-//   2. Scenario Engine : Text-Panel, das Open / Action / Read, den Pfad
-//                        (Sequence & Next), die Flip-Bedingungen und den
-//                        Live-Status wie im Original beschreibt
-//   3. Dealer-Sektion  : Upper/Lower Dealer Pressure Zone (DPZ) als
+//   2. CBOE-Modus      : Level werden aus echten CBOE-Optionsmarktdaten
+//                        abgeleitet (VIX/VIX1D → Expected Move, SKEW →
+//                        Asymmetrie, Put/Call-Ratio → Positionierungs-Bias),
+//                        aufs Strike-Raster gerundet und zur Eröffnung
+//                        eingefroren — kein Repaint, kein Intraday-Wandern
+//   3. Scenario Engine : Text-Panel mit Open / Action / Read, Pfad
+//                        (Sequence & Next), Flip-Bedingungen, Live-Status
+//   4. Dealer-Sektion  : Upper/Lower Dealer Pressure Zone (DPZ) als
 //                        volumengewichteter Preis innerhalb des Korridors,
 //                        Abs-GEX-Anzeige
-//   4. Trend-Ribbon    : EMA-Ribbon mit LONG/SHORT-Signalen bei Konfluenz
+//   5. Trend-Ribbon    : EMA-Ribbon mit LONG/SHORT-Signalen bei Konfluenz
 //                        aus Gamma-Regime, Struktur und Trend
-//   5. Extras          : Auto-Modus (Level werden statistisch berechnet,
-//                        wenn du nichts einträgst), Alerts für jeden
-//                        Level-Bruch, Session-VWAP
 //
-//  Bedienung: Trage die Options-Level (z.B. von deinem GEX-Datenanbieter)
-//  täglich unter "Options-Level" ein. Felder mit 0 werden automatisch
-//  aus Preis-/Volumenstatistik geschätzt.
+//  Level-Priorität: manuell eingetragen  >  CBOE-Optionsdaten  >  Statistik.
+//  Felder mit 0 unter "Options-Level" nutzen die automatische Quelle.
 // ═══════════════════════════════════════════════════════════════════════════
 indicator("GEXR-Style Matrix PRO", shorttitle="GEXR-Style", overlay=true,
      max_labels_count=200, max_lines_count=200, max_boxes_count=100)
 
 // ─────────────────────────── Inputs ───────────────────────────
-grpO = "Options-Level (täglich eintragen · 0 = automatisch)"
+grpO = "Options-Level (manuell · 0 = automatische Quelle)"
 inMaxPain = input.float(0.0, "Max Pain",         minval=0, group=grpO)
 inGexFlip = input.float(0.0, "GEX Flip",         minval=0, group=grpO)
 inPivot   = input.float(0.0, "Dealer Pivot",     minval=0, group=grpO)
@@ -36,7 +36,15 @@ inVU      = input.float(0.0, "VU (Vol Trigger oben)",  minval=0, group=grpO)
 inVD      = input.float(0.0, "VD (Vol Trigger unten)", minval=0, group=grpO)
 inAbsGex  = input.float(0.0, "Abs GEX Strike",   minval=0, group=grpO)
 
-grpA = "Auto-Modus (Statistik-Proxy)"
+grpC = "CBOE-Datenquelle (Auto-Modus)"
+levelSource  = input.string("CBOE-Optionsdaten", "Level-Quelle", options=["CBOE-Optionsdaten", "Statistisch (Preis/Volumen)"], group=grpC)
+volSym       = input.symbol("CBOE:VIX1D", "IV-Index kurzfristig (1 Tag)", group=grpC, tooltip="Für SPX/SPY/US-Indizes: CBOE:VIX1D. Für NDX/QQQ: CBOE:VXN. Wenn ungültig, wird der Basis-IV-Index genutzt.")
+vol0Sym      = input.symbol("CBOE:VIX",   "IV-Index Basis (30 Tage)", group=grpC)
+skewSym      = input.symbol("CBOE:SKEW",  "Skew-Index", group=grpC)
+pccSym       = input.symbol("USI:PCC",    "Put/Call-Ratio", group=grpC)
+strikeStepIn = input.float(0.0, "Strike-Raster (0 = automatisch)", minval=0, step=0.5, group=grpC)
+
+grpA = "Statistik-Fallback"
 lenAnchor = input.int(200, "Flow-Anker Länge (Bars)", minval=20, group=grpA)
 
 grpD = "Abgeleitete Level"
@@ -69,6 +77,7 @@ rsi = ta.rsi(close, rsiLen)
 // Vortageswerte (kein Repaint: [1]-Werte mit lookahead_on)
 htf = timeframe.isintraday ? "D" : "W"
 [pdH, pdL, pdC] = request.security(syminfo.tickerid, htf, [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+sma5D = request.security(syminfo.tickerid, "D", ta.sma(close, 5)[1], lookahead=barmerge.lookahead_on)
 
 // Session-Tracking
 newSes = ta.change(time("D")) != 0
@@ -95,20 +104,56 @@ else if time - sesStart < orMinutes * 60 * 1000
     orH := math.max(orH, high)
     orL := math.min(orL, low)
 
-// ─────────────────────── Level-Matrix ───────────────────────
-// Auto-Proxies aus volumengewichteter Preisstatistik
+// ─────────────── CBOE-Optionsdaten (Vortagesschluss → heute fix) ───────────────
+iv1  = request.security(volSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+iv0  = request.security(vol0Sym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+skew = request.security(skewSym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+pcc  = request.security(pccSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+ivDay   = nz(iv1, iv0)                     // annualisierte IV in %
+useCboe = levelSource == "CBOE-Optionsdaten" and not na(ivDay) and not na(pdC)
+
+// Strike-Raster (automatisch nach Preisniveau, wie US-Optionsketten)
+autoStep = pdC < 25 ? 0.5 : pdC < 100 ? 1.0 : pdC < 500 ? 2.5 : pdC < 1000 ? 5.0 : 10.0
+step = strikeStepIn > 0 ? strikeStepIn : autoStep
+f_strike(_p) => math.round(_p / step) * step
+
+// Expected Move aus IV: P × IV/100 × √(t/252)
+em1 = pdC * ivDay / 100 * math.sqrt(1.0 / 252.0)
+em5 = pdC * nz(iv0, ivDay) / 100 * math.sqrt(5.0 / 252.0)
+
+// SKEW → Asymmetrie (hoher SKEW = mehr OTM-Put-Nachfrage → Downside weiter)
+skewF = math.min(math.max((nz(skew, 115) - 115) / 100, -0.15), 0.35)
+// Put/Call-Ratio → Positionierungs-Bias (>1 = put-lastig)
+posBias = nz(pcc, 1.0) - 1.0
+
+upEM = em1 * (1 - 0.5 * skewF)
+dnEM = em1 * (1 + skewF)
+
+cboeGex  = f_strike(pdC - posBias * 0.5 * em1)
+cboeCall = f_strike(pdC + upEM)
+cboePut  = f_strike(pdC - dnEM)
+cboeCall := math.max(cboeCall, cboeGex + step)
+cboePut  := math.min(cboePut,  cboeGex - step)
+cboeVU   = math.max(f_strike(pdC + math.max(em5, 2 * upEM)), cboeCall + step)
+cboeVD   = math.min(f_strike(pdC - math.max(em5 * (1 + skewF), 2 * dnEM)), cboePut - step)
+cboePain = f_strike(sma5D)
+cboePivot = f_strike((pdH + pdL + pdC) / 3)
+
+// ─────────────── Statistik-Fallback (ohne Optionsdaten) ───────────────
 flow  = math.sum(src * vol, lenAnchor) / math.sum(vol, lenAnchor)
 sigma = ta.stdev(src, lenAnchor)
 
-f_lvl(_manual, _auto) => _manual > 0 ? _manual : _auto
+// ─────────────────────── Level-Matrix ───────────────────────
+f_lvl(_manual, _cboe, _stat) => _manual > 0 ? _manual : useCboe ? _cboe : _stat
 
-gexL   = f_lvl(inGexFlip, flow)
-callL  = f_lvl(inCall,    flow + 2 * sigma)
-putL   = f_lvl(inPut,     flow - 2 * sigma)
-vuL    = f_lvl(inVU,      flow + 3 * sigma)
-vdL    = f_lvl(inVD,      flow - 3 * sigma)
-painL  = f_lvl(inMaxPain, ta.sma(src, lenAnchor))
-pivotL = f_lvl(inPivot,   (pdH + pdL + pdC) / 3)
+gexL   = f_lvl(inGexFlip, cboeGex,   flow)
+callL  = f_lvl(inCall,    cboeCall,  flow + 2 * sigma)
+putL   = f_lvl(inPut,     cboePut,   flow - 2 * sigma)
+vuL    = f_lvl(inVU,      cboeVU,    flow + 3 * sigma)
+vdL    = f_lvl(inVD,      cboeVD,    flow - 3 * sigma)
+painL  = f_lvl(inMaxPain, cboePain,  ta.sma(src, lenAnchor))
+pivotL = f_lvl(inPivot,   cboePivot, (pdH + pdL + pdC) / 3)
 
 // Abgeleitete Level (interne Benchmarks wie UDL/LDL im Original)
 udl = gexL + derivFrac * (callL - gexL)
@@ -135,7 +180,6 @@ activeTx = adxV > 18 ? "Active" : "Idle"
 
 // Session-Verlauf für die Scenario Engine
 heldPivot  = sesL > pivotL
-lostPivot  = sesL < pivotL and close < pivotL
 openAbvPiv = sesO > pivotL
 openAbvGex = sesO > gexL
 
@@ -255,6 +299,9 @@ txtFlip = posGamma ?
 chk(_b) => _b ? "✓" : "✗"
 txtLevels = "PV " + chk(abovePivot) + "  GX " + chk(posGamma) + "  PUT " + chk(close > putL) + "  CALL " + chk(close > callL)
 modeTx = (adxV > 25 ? "Trending" : "Balanced") + " · ATR " + (volaTx == "Loud" ? "Expanded" : volaTx == "Quiet" ? "Compressed" : "Balanced")
+srcTx = useCboe ?
+     "IV " + str.tostring(ivDay, "0.0") + " · EM ±" + f_fmt(em1) + " · SKEW " + str.tostring(nz(skew, 0), "0") + " · P/C " + str.tostring(nz(pcc, 1), "0.00") :
+     "Statistik-Modus (keine Optionsdaten)"
 
 // ─────────────────────── Matrix-Panel ───────────────────────
 cBull  = color.new(#2ecc71, 0)
@@ -275,7 +322,7 @@ f_row(table _t, int _row, string _k, string _v, color _vc) =>
 
 if showPanel and barstate.islast
     pos = panelPos == "Unten rechts" ? position.bottom_right : panelPos == "Oben links" ? position.top_left : position.top_right
-    var table t = table.new(pos, 2, 26, bgcolor=cBg, border_width=1, border_color=color.new(color.gray, 75))
+    var table t = table.new(pos, 2, 27, bgcolor=cBg, border_width=1, border_color=color.new(color.gray, 75))
     cBias = biasBull ? cBull : biasBear ? cBear : cAmber
     table.cell(t, 0, 0, "GEXR-Style Matrix  " + syminfo.ticker, text_color=cText, text_size=size.small, text_halign=text.align_left, bgcolor=cHead)
     table.cell(t, 1, 0, biasTx, text_color=cBias, text_size=size.small, text_halign=text.align_right, bgcolor=cHead)
@@ -283,27 +330,28 @@ if showPanel and barstate.islast
     f_row(t, 2, "Pressure:",  "Max Pain @ " + f_fmt(painL), cAmber)
     f_row(t, 3, "Break:",     "Dealer Pivot @ " + f_fmt(pivotL), cText)
     f_row(t, 4, "Corridor:",  "VD ↔ VU  |  " + f_fmt(vdL) + " – " + f_fmt(vuL), cText)
-    f_row(t, 5, "ATR Story:", (ribbonUp ? "Bullish" : "Bearish") + " · " + volaTx + " · " + actionTx, ribbonUp ? cBull : cBear)
-    f_row(t, 6, "Alignment:", (aligned ? "Aligned" : "Mixed") + " · " + activeTx, aligned ? cBull : cAmber)
-    f_head(t, 7, "◦ SCENARIO ENGINE")
-    f_row(t, 8,  "Open:",   txtOpen, cText)
-    f_row(t, 9,  "Action:", txtAction, cText)
-    f_row(t, 10, "Read:",   txtRead, posGamma ? cBull : cBear)
-    f_head(t, 11, "◦ THE PATH")
-    f_row(t, 12, "Bias:",     biasTx + " · " + activeTx, cBias)
-    f_row(t, 13, "Sequence:", txtSeq, posGamma ? cBull : cBear)
-    f_row(t, 14, "Next:",     txtNext, cText)
-    f_head(t, 15, "◦ THE TURN")
-    f_row(t, 16, "Flip If:", txtFlip, cAmber)
-    f_head(t, 17, "◦ LIVE STATUS")
-    f_row(t, 18, "Levels:",      txtLevels, cText)
-    f_row(t, 19, "Pivot / GEX:", f_fmt(pivotL) + "  /  " + f_fmt(gexL), cText)
-    f_row(t, 20, "Put / VD:",    f_fmt(putL) + "  /  " + f_fmt(vdL), cText)
-    f_row(t, 21, "Mode:",        modeTx, cText)
-    f_head(t, 22, "◦ DEALER")
-    f_row(t, 23, "Upper DPZ:", "▲ " + f_fmt(upperDPZ) + "  [" + f_fmt(gexL) + " – " + f_fmt(vuL) + "]", cBull)
-    f_row(t, 24, "Lower DPZ:", "▼ " + f_fmt(lowerDPZ) + "  [" + f_fmt(vdL) + " – " + f_fmt(gexL) + "]", cBear)
-    f_row(t, 25, "Abs GEX:",   absGexTx, cAmber)
+    f_row(t, 5, "Options:",   srcTx, useCboe ? cText : cAmber)
+    f_row(t, 6, "ATR Story:", (ribbonUp ? "Bullish" : "Bearish") + " · " + volaTx + " · " + actionTx, ribbonUp ? cBull : cBear)
+    f_row(t, 7, "Alignment:", (aligned ? "Aligned" : "Mixed") + " · " + activeTx, aligned ? cBull : cAmber)
+    f_head(t, 8, "◦ SCENARIO ENGINE")
+    f_row(t, 9,  "Open:",   txtOpen, cText)
+    f_row(t, 10, "Action:", txtAction, cText)
+    f_row(t, 11, "Read:",   txtRead, posGamma ? cBull : cBear)
+    f_head(t, 12, "◦ THE PATH")
+    f_row(t, 13, "Bias:",     biasTx + " · " + activeTx, cBias)
+    f_row(t, 14, "Sequence:", txtSeq, posGamma ? cBull : cBear)
+    f_row(t, 15, "Next:",     txtNext, cText)
+    f_head(t, 16, "◦ THE TURN")
+    f_row(t, 17, "Flip If:", txtFlip, cAmber)
+    f_head(t, 18, "◦ LIVE STATUS")
+    f_row(t, 19, "Levels:",      txtLevels, cText)
+    f_row(t, 20, "Pivot / GEX:", f_fmt(pivotL) + "  /  " + f_fmt(gexL), cText)
+    f_row(t, 21, "Put / VD:",    f_fmt(putL) + "  /  " + f_fmt(vdL), cText)
+    f_row(t, 22, "Mode:",        modeTx, cText)
+    f_head(t, 23, "◦ DEALER")
+    f_row(t, 24, "Upper DPZ:", "▲ " + f_fmt(upperDPZ) + "  [" + f_fmt(gexL) + " – " + f_fmt(vuL) + "]", cBull)
+    f_row(t, 25, "Lower DPZ:", "▼ " + f_fmt(lowerDPZ) + "  [" + f_fmt(vdL) + " – " + f_fmt(gexL) + "]", cBear)
+    f_row(t, 26, "Abs GEX:",   absGexTx, cAmber)
 
 // ─────────────────────── Alerts ───────────────────────
 gexUp   = ta.crossover(close, gexL)
