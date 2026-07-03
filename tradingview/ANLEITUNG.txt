@@ -1,0 +1,26 @@
+GEXR-STYLE MATRIX - SCHNELLANLEITUNG
+=====================================
+
+EINMALIG:
+1. Diesen Ordner nach C:\Trading entpacken (oder wo du willst)
+2. TradingView: Pine Editor oeffnen, Inhalt von
+   GEXR_Style_Matrix.pine einfuegen, Speichern,
+   "Zum Chart hinzufuegen"
+
+JEDEN MORGEN (vor US-Open, ca. 15:00 deutscher Zeit):
+1. Doppelklick auf  Level-Holen.bat
+   -> holt die echten Optionslevel fuer ES und NQ
+   -> kopiert den fertigen Code automatisch in die Zwischenablage
+2. TradingView: Pine Editor -> Strg+A -> Strg+V -> Speichern
+
+DAS WAR'S. Der Indikator erkennt selbst, ob NQ, ES, Gold, Bitcoin
+usw. auf dem Chart liegt - nichts einstellen.
+
+Uebrigens: Schritt "Jeden Morgen" ist optional. Ohne frische Level
+schaetzt der Indikator automatisch aus den Volatilitaetsindizes.
+
+Andere Maerkte holen (Beispiele):
+  python fetch_gex_levels.py GLD --patch GEXR_Style_Matrix.pine   (Gold)
+  python fetch_gex_levels.py IBIT --patch GEXR_Style_Matrix.pine  (Bitcoin)
+
+Kein Anlagerat. Viel Erfolg!
