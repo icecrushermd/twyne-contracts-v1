@@ -1,0 +1,323 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════════════
+//  GEXR-Style Matrix PRO  —  Open-Source-Indikator im Stil des "GEXR Matrix"
+//
+//  Funktionsumfang (wie das Original — plus Extras):
+//   1. Level-Matrix    : Max Pain, GEX Flip, Dealer Pivot, Call/Put Wall,
+//                        Vola-Korridor (VD/VU), abgeleitete UDL/LDL-Level,
+//                        Opening-Range-Zone (ORZ)
+//   2. Scenario Engine : Text-Panel, das Open / Action / Read, den Pfad
+//                        (Sequence & Next), die Flip-Bedingungen und den
+//                        Live-Status wie im Original beschreibt
+//   3. Dealer-Sektion  : Upper/Lower Dealer Pressure Zone (DPZ) als
+//                        volumengewichteter Preis innerhalb des Korridors,
+//                        Abs-GEX-Anzeige
+//   4. Trend-Ribbon    : EMA-Ribbon mit LONG/SHORT-Signalen bei Konfluenz
+//                        aus Gamma-Regime, Struktur und Trend
+//   5. Extras          : Auto-Modus (Level werden statistisch berechnet,
+//                        wenn du nichts einträgst), Alerts für jeden
+//                        Level-Bruch, Session-VWAP
+//
+//  Bedienung: Trage die Options-Level (z.B. von deinem GEX-Datenanbieter)
+//  täglich unter "Options-Level" ein. Felder mit 0 werden automatisch
+//  aus Preis-/Volumenstatistik geschätzt.
+// ═══════════════════════════════════════════════════════════════════════════
+indicator("GEXR-Style Matrix PRO", shorttitle="GEXR-Style", overlay=true,
+     max_labels_count=200, max_lines_count=200, max_boxes_count=100)
+
+// ─────────────────────────── Inputs ───────────────────────────
+grpO = "Options-Level (täglich eintragen · 0 = automatisch)"
+inMaxPain = input.float(0.0, "Max Pain",         minval=0, group=grpO)
+inGexFlip = input.float(0.0, "GEX Flip",         minval=0, group=grpO)
+inPivot   = input.float(0.0, "Dealer Pivot",     minval=0, group=grpO)
+inCall    = input.float(0.0, "Call Wall",        minval=0, group=grpO)
+inPut     = input.float(0.0, "Put Wall",         minval=0, group=grpO)
+inVU      = input.float(0.0, "VU (Vol Trigger oben)",  minval=0, group=grpO)
+inVD      = input.float(0.0, "VD (Vol Trigger unten)", minval=0, group=grpO)
+inAbsGex  = input.float(0.0, "Abs GEX Strike",   minval=0, group=grpO)
+
+grpA = "Auto-Modus (Statistik-Proxy)"
+lenAnchor = input.int(200, "Flow-Anker Länge (Bars)", minval=20, group=grpA)
+
+grpD = "Abgeleitete Level"
+derivFrac = input.float(0.25, "UDL/LDL Abstand (Anteil GEX→Call)", step=0.05, minval=0.05, maxval=1.0, group=grpD)
+orMinutes = input.int(15, "Opening Range (Minuten)", minval=1, group=grpD)
+showORZ   = input.bool(true, "ORZ (Opening Range) anzeigen", group=grpD)
+showVwap  = input.bool(false, "Session-VWAP anzeigen", group=grpD)
+
+grpT = "Trend & Signale"
+atrLen     = input.int(14, "ATR Länge", minval=1, group=grpT)
+rsiLen     = input.int(14, "RSI Länge", minval=2, group=grpT)
+useSignals = input.bool(true, "LONG/SHORT Signale anzeigen", group=grpT)
+minBarsBetween = input.int(10, "Mindestabstand zwischen Signalen (Bars)", minval=0, group=grpT)
+
+grpV = "Darstellung"
+showPanel   = input.bool(true, "Matrix-Panel anzeigen", group=grpV)
+showRibbon  = input.bool(true, "Trend-Ribbon anzeigen", group=grpV)
+shadeCorr   = input.bool(false, "Gamma-Korridor einfärben", group=grpV)
+panelPos    = input.string("Oben rechts", "Panel-Position", options=["Oben rechts", "Unten rechts", "Oben links"], group=grpV)
+
+// ─────────────────────── Basis-Daten ───────────────────────
+f_fmt(_x) => str.tostring(_x, format.mintick)
+
+src = hlc3
+vol = nz(volume) > 0 ? volume : 1.0
+atr = ta.atr(atrLen)
+rsi = ta.rsi(close, rsiLen)
+[diP, diM, adxV] = ta.dmi(14, 14)
+
+// Vortageswerte (kein Repaint: [1]-Werte mit lookahead_on)
+htf = timeframe.isintraday ? "D" : "W"
+[pdH, pdL, pdC] = request.security(syminfo.tickerid, htf, [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+
+// Session-Tracking
+newSes = ta.change(time("D")) != 0
+var float sesO = na
+var float sesH = na
+var float sesL = na
+var int sesStart = na
+if newSes or na(sesO)
+    sesO := open
+    sesH := high
+    sesL := low
+    sesStart := time
+else
+    sesH := math.max(sesH, high)
+    sesL := math.min(sesL, low)
+
+// Opening Range
+var float orH = na
+var float orL = na
+if newSes or na(orH)
+    orH := high
+    orL := low
+else if time - sesStart < orMinutes * 60 * 1000
+    orH := math.max(orH, high)
+    orL := math.min(orL, low)
+
+// ─────────────────────── Level-Matrix ───────────────────────
+// Auto-Proxies aus volumengewichteter Preisstatistik
+flow  = math.sum(src * vol, lenAnchor) / math.sum(vol, lenAnchor)
+sigma = ta.stdev(src, lenAnchor)
+
+f_lvl(_manual, _auto) => _manual > 0 ? _manual : _auto
+
+gexL   = f_lvl(inGexFlip, flow)
+callL  = f_lvl(inCall,    flow + 2 * sigma)
+putL   = f_lvl(inPut,     flow - 2 * sigma)
+vuL    = f_lvl(inVU,      flow + 3 * sigma)
+vdL    = f_lvl(inVD,      flow - 3 * sigma)
+painL  = f_lvl(inMaxPain, ta.sma(src, lenAnchor))
+pivotL = f_lvl(inPivot,   (pdH + pdL + pdC) / 3)
+
+// Abgeleitete Level (interne Benchmarks wie UDL/LDL im Original)
+udl = gexL + derivFrac * (callL - gexL)
+ldl = gexL - derivFrac * (callL - gexL)
+
+// ─────────────────────── Regime & Trend ───────────────────────
+posGamma = close > gexL
+abovePivot = close > pivotL
+
+emaF = ta.ema(close, 8)
+emaM = ta.ema(close, 21)
+emaS = ta.ema(close, 50)
+ribbonUp = emaF > emaM
+
+atrPct = ta.percentrank(atr, 100)
+volaTx   = atrPct > 70 ? "Loud" : atrPct < 30 ? "Quiet" : "Normal"
+actionTx = math.abs(close - sesO) < atr * 2 ? "Hold" : close > sesO ? "Push Up" : "Push Down"
+
+biasBull = posGamma and ribbonUp
+biasBear = not posGamma and not ribbonUp
+biasTx   = biasBull ? "Bullish" : biasBear ? "Bearish" : "Mixed"
+aligned  = biasBull or biasBear
+activeTx = adxV > 18 ? "Active" : "Idle"
+
+// Session-Verlauf für die Scenario Engine
+heldPivot  = sesL > pivotL
+lostPivot  = sesL < pivotL and close < pivotL
+openAbvPiv = sesO > pivotL
+openAbvGex = sesO > gexL
+
+// ─────────────── Dealer Pressure Zones (DPZ) ───────────────
+// Volumengewichteter Preis der Trades innerhalb des jeweiligen Korridors
+var float upNum = 0.0
+var float upDen = 0.0
+var float dnNum = 0.0
+var float dnDen = 0.0
+if newSes
+    upNum := 0.0
+    upDen := 0.0
+    dnNum := 0.0
+    dnDen := 0.0
+if src >= gexL and src <= vuL
+    upNum += src * vol
+    upDen += vol
+if src <= gexL and src >= vdL
+    dnNum += src * vol
+    dnDen += vol
+upperDPZ = upDen > 0 ? upNum / upDen : math.avg(gexL, vuL)
+lowerDPZ = dnDen > 0 ? dnNum / dnDen : math.avg(gexL, vdL)
+absGexL  = inAbsGex > 0 ? inAbsGex : posGamma ? callL : putL
+absGexTx = (inAbsGex > 0 ? (inAbsGex >= gexL ? "CALL" : "PUT") : posGamma ? "CALL" : "PUT") + " @ " + f_fmt(absGexL)
+
+// ─────────────────────── Signale ───────────────────────
+longRaw  = posGamma and ribbonUp and rsi > 50 and (ta.crossover(close, udl) or ta.crossover(close, gexL))
+shortRaw = not posGamma and not ribbonUp and rsi < 50 and (ta.crossunder(close, ldl) or ta.crossunder(close, gexL))
+
+var int lastSigBar = -1000000
+canSignal = bar_index - lastSigBar >= minBarsBetween
+longSig  = useSignals and canSignal and longRaw
+shortSig = useSignals and canSignal and shortRaw and not longSig
+if longSig or shortSig
+    lastSigBar := bar_index
+
+// ─────────────────────── Plots ───────────────────────
+pRibF = plot(showRibbon ? emaF : na, "Ribbon schnell", color=color.new(ribbonUp ? color.green : color.red, 60))
+pRibM = plot(showRibbon ? emaM : na, "Ribbon langsam", color=color.new(ribbonUp ? color.green : color.red, 75))
+fill(pRibF, pRibM, color=color.new(ribbonUp ? color.green : color.red, 85), title="Trend-Ribbon")
+sessVwap = ta.vwap(src)
+plot(showVwap ? sessVwap : na, "Session-VWAP", color=color.new(color.aqua, 40))
+
+pGex  = plot(gexL,  "GEX Flip",  color=color.new(color.orange, 100), display=display.status_line)
+pCall = plot(callL, "Call Wall", color=color.new(color.teal, 100),   display=display.status_line)
+pPut  = plot(putL,  "Put Wall",  color=color.new(color.maroon, 100), display=display.status_line)
+fill(pGex, pCall, color=shadeCorr ? color.new(color.green, 92) : na, title="Positiver Gamma-Korridor")
+fill(pGex, pPut,  color=shadeCorr ? color.new(color.red, 92) : na,   title="Negativer Gamma-Korridor")
+
+plotshape(longSig,  "Long",  shape.triangleup,   location.belowbar, color.new(color.green, 0), text="LONG",  textcolor=color.white, size=size.small)
+plotshape(shortSig, "Short", shape.triangledown, location.abovebar, color.new(color.red, 0),   text="SHORT", textcolor=color.white, size=size.small)
+
+// ─────────────── Level-Linien & Beschriftungen ───────────────
+var line[]  lvlLines  = array.new_line()
+var label[] lvlLabels = array.new_label()
+
+f_level(float _y, string _name, color _col, bool _dashed) =>
+    if not na(_y)
+        array.push(lvlLines, line.new(bar_index - 1, _y, bar_index, _y, extend=extend.both,
+             color=color.new(_col, 25), style=_dashed ? line.style_dashed : line.style_solid))
+        array.push(lvlLabels, label.new(bar_index + 3, _y, _name + " " + f_fmt(_y),
+             style=label.style_label_left, color=color.new(_col, 15), textcolor=color.white, size=size.small))
+
+if barstate.islast
+    for ln in lvlLines
+        line.delete(ln)
+    for lb in lvlLabels
+        label.delete(lb)
+    array.clear(lvlLines)
+    array.clear(lvlLabels)
+    f_level(painL,  "PAIN",  color.gray,    true)
+    f_level(vuL,    "VU",    color.teal,    true)
+    f_level(callL,  "CALL",  color.teal,    false)
+    f_level(udl,    "UDL",   color.olive,   false)
+    f_level(gexL,   "GEX",   color.orange,  false)
+    f_level(ldl,    "LDL",   color.olive,   false)
+    f_level(pivotL, "PIVOT", color.yellow,  false)
+    f_level(putL,   "PUT",   color.maroon,  false)
+    f_level(vdL,    "VD",    color.maroon,  true)
+    if showORZ and timeframe.isintraday
+        f_level(orH, "ORZ H", color.silver, true)
+        f_level(orL, "ORZ L", color.silver, true)
+
+// ─────────────────── Scenario Engine (Texte) ───────────────────
+txtOpen = switch
+    openAbvPiv and openAbvGex         => "Opened above Pivot (" + f_fmt(pivotL) + ")\nand GEX Flip (" + f_fmt(gexL) + ").\nBulls started with the regime."
+    not openAbvPiv and not openAbvGex => "Opened below Pivot (" + f_fmt(pivotL) + ")\nand GEX Flip (" + f_fmt(gexL) + ").\nBears started with the regime."
+    => "Opened between Pivot (" + f_fmt(pivotL) + ")\nand GEX Flip (" + f_fmt(gexL) + ").\nRegime undecided at the open."
+
+txtAction = switch
+    posGamma and heldPivot => "Held Pivot (" + f_fmt(pivotL) + ")\nand cleared GEX Flip (" + f_fmt(gexL) + ").\nPositive gamma regime intact."
+    posGamma               => "Reclaimed GEX Flip (" + f_fmt(gexL) + ")\nafter testing Pivot.\nRegime repaired."
+    abovePivot             => "Holding Pivot (" + f_fmt(pivotL) + ")\nbut below GEX Flip (" + f_fmt(gexL) + ").\nRegime contested."
+    => "Lost Pivot (" + f_fmt(pivotL) + ").\nBears control the tape."
+
+txtRead = switch
+    posGamma and abovePivot => "Above Pivot and GEX Flip.\nPositive gamma — dealers stabilizing.\nBulls own structure.\nUDL (" + f_fmt(udl) + ") is internal benchmark."
+    abovePivot              => "Above Pivot, below GEX Flip.\nNegative gamma pocket — moves extend.\nLDL (" + f_fmt(ldl) + ") guides risk."
+    => "Below Pivot.\nNegative gamma — dealers amplify moves.\nLDL (" + f_fmt(ldl) + ") / Put Wall (" + f_fmt(putL) + ") in play."
+
+txtSeq = posGamma ?
+     "Positive gamma holds above GEX Flip.\nPath: UDL (" + f_fmt(udl) + ") → Call Wall (" + f_fmt(callL) + ").\nClear that → VU (" + f_fmt(vuL) + ") opens." :
+     "Negative gamma below GEX Flip.\nPath: LDL (" + f_fmt(ldl) + ") → Put Wall (" + f_fmt(putL) + ").\nLose that → VD (" + f_fmt(vdL) + ") opens."
+
+txtNext = posGamma ?
+     (close < udl ? "UDL @ " + f_fmt(udl) + " → Call @ " + f_fmt(callL) :
+      close < callL ? "Call @ " + f_fmt(callL) + " → VU @ " + f_fmt(vuL) :
+      "VU @ " + f_fmt(vuL) + " (Korridor-Rand)") :
+     (close > ldl ? "LDL @ " + f_fmt(ldl) + " → Put @ " + f_fmt(putL) :
+      close > putL ? "Put @ " + f_fmt(putL) + " → VD @ " + f_fmt(vdL) :
+      "VD @ " + f_fmt(vdL) + " (Korridor-Rand)")
+
+txtFlip = posGamma ?
+     "Lose GEX Flip (" + f_fmt(gexL) + ") on close → gamma weakens.\nLose Pivot (" + f_fmt(pivotL) + ") → structure turns bearish fast." :
+     "Reclaim GEX Flip (" + f_fmt(gexL) + ") → gamma stabilizes.\nReclaim Pivot (" + f_fmt(pivotL) + ") first."
+
+chk(_b) => _b ? "✓" : "✗"
+txtLevels = "PV " + chk(abovePivot) + "  GX " + chk(posGamma) + "  PUT " + chk(close > putL) + "  CALL " + chk(close > callL)
+modeTx = (adxV > 25 ? "Trending" : "Balanced") + " · ATR " + (volaTx == "Loud" ? "Expanded" : volaTx == "Quiet" ? "Compressed" : "Balanced")
+
+// ─────────────────────── Matrix-Panel ───────────────────────
+cBull  = color.new(#2ecc71, 0)
+cBear  = color.new(#ff5252, 0)
+cAmber = color.new(#f0b429, 0)
+cText  = color.new(#d8dee9, 0)
+cKey   = color.new(#8a919e, 0)
+cBg    = color.new(#0b0e14, 15)
+cHead  = color.new(#151a24, 0)
+
+f_head(table _t, int _row, string _txt) =>
+    table.cell(_t, 0, _row, _txt, text_color=cAmber, text_size=size.tiny, text_halign=text.align_left, bgcolor=cHead)
+    table.cell(_t, 1, _row, "",   bgcolor=cHead)
+
+f_row(table _t, int _row, string _k, string _v, color _vc) =>
+    table.cell(_t, 0, _row, _k, text_color=cKey, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(_t, 1, _row, _v, text_color=_vc, text_size=size.tiny, text_halign=text.align_left)
+
+if showPanel and barstate.islast
+    pos = panelPos == "Unten rechts" ? position.bottom_right : panelPos == "Oben links" ? position.top_left : position.top_right
+    var table t = table.new(pos, 2, 26, bgcolor=cBg, border_width=1, border_color=color.new(color.gray, 75))
+    cBias = biasBull ? cBull : biasBear ? cBear : cAmber
+    table.cell(t, 0, 0, "GEXR-Style Matrix  " + syminfo.ticker, text_color=cText, text_size=size.small, text_halign=text.align_left, bgcolor=cHead)
+    table.cell(t, 1, 0, biasTx, text_color=cBias, text_size=size.small, text_halign=text.align_right, bgcolor=cHead)
+    f_head(t, 1, "◦ FLOW")
+    f_row(t, 2, "Pressure:",  "Max Pain @ " + f_fmt(painL), cAmber)
+    f_row(t, 3, "Break:",     "Dealer Pivot @ " + f_fmt(pivotL), cText)
+    f_row(t, 4, "Corridor:",  "VD ↔ VU  |  " + f_fmt(vdL) + " – " + f_fmt(vuL), cText)
+    f_row(t, 5, "ATR Story:", (ribbonUp ? "Bullish" : "Bearish") + " · " + volaTx + " · " + actionTx, ribbonUp ? cBull : cBear)
+    f_row(t, 6, "Alignment:", (aligned ? "Aligned" : "Mixed") + " · " + activeTx, aligned ? cBull : cAmber)
+    f_head(t, 7, "◦ SCENARIO ENGINE")
+    f_row(t, 8,  "Open:",   txtOpen, cText)
+    f_row(t, 9,  "Action:", txtAction, cText)
+    f_row(t, 10, "Read:",   txtRead, posGamma ? cBull : cBear)
+    f_head(t, 11, "◦ THE PATH")
+    f_row(t, 12, "Bias:",     biasTx + " · " + activeTx, cBias)
+    f_row(t, 13, "Sequence:", txtSeq, posGamma ? cBull : cBear)
+    f_row(t, 14, "Next:",     txtNext, cText)
+    f_head(t, 15, "◦ THE TURN")
+    f_row(t, 16, "Flip If:", txtFlip, cAmber)
+    f_head(t, 17, "◦ LIVE STATUS")
+    f_row(t, 18, "Levels:",      txtLevels, cText)
+    f_row(t, 19, "Pivot / GEX:", f_fmt(pivotL) + "  /  " + f_fmt(gexL), cText)
+    f_row(t, 20, "Put / VD:",    f_fmt(putL) + "  /  " + f_fmt(vdL), cText)
+    f_row(t, 21, "Mode:",        modeTx, cText)
+    f_head(t, 22, "◦ DEALER")
+    f_row(t, 23, "Upper DPZ:", "▲ " + f_fmt(upperDPZ) + "  [" + f_fmt(gexL) + " – " + f_fmt(vuL) + "]", cBull)
+    f_row(t, 24, "Lower DPZ:", "▼ " + f_fmt(lowerDPZ) + "  [" + f_fmt(vdL) + " – " + f_fmt(gexL) + "]", cBear)
+    f_row(t, 25, "Abs GEX:",   absGexTx, cAmber)
+
+// ─────────────────────── Alerts ───────────────────────
+gexUp   = ta.crossover(close, gexL)
+gexDn   = ta.crossunder(close, gexL)
+pivUp   = ta.crossover(close, pivotL)
+pivDn   = ta.crossunder(close, pivotL)
+callHit = ta.crossover(high, callL)
+putHit  = ta.crossunder(low, putL)
+
+alertcondition(longSig,  "GEXR Long-Setup",      "GEXR-Style: LONG — Struktur + Gamma-Regime + Trend im Einklang")
+alertcondition(shortSig, "GEXR Short-Setup",     "GEXR-Style: SHORT — Struktur + Gamma-Regime + Trend im Einklang")
+alertcondition(gexUp,    "GEX Flip zurückerobert", "GEXR-Style: Schluss über GEX Flip — positives Gamma-Regime")
+alertcondition(gexDn,    "GEX Flip verloren",      "GEXR-Style: Schluss unter GEX Flip — Gamma-Regime schwächt sich ab")
+alertcondition(pivUp,    "Dealer Pivot zurückerobert", "GEXR-Style: Schluss über Dealer Pivot")
+alertcondition(pivDn,    "Dealer Pivot verloren",      "GEXR-Style: Schluss unter Dealer Pivot — Struktur kippt bärisch")
+alertcondition(callHit,  "Call Wall erreicht", "GEXR-Style: Call Wall getestet — Widerstandszone")
+alertcondition(putHit,   "Put Wall erreicht",  "GEXR-Style: Put Wall getestet — Supportzone")
