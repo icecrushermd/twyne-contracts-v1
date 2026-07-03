@@ -44,6 +44,11 @@ skewSym      = input.symbol("CBOE:SKEW",  "Skew-Index", group=grpC)
 pccSym       = input.symbol("USI:PCC",    "Put/Call-Ratio", group=grpC)
 strikeStepIn = input.float(0.0, "Strike-Raster (0 = automatisch)", minval=0, step=0.5, group=grpC)
 
+grpF = "Futures-Modus (ES/NQ/MES/MNQ)"
+useRef = input.bool(false, "Level von Referenz-Symbol umrechnen", group=grpF, tooltip="ES/MES: Referenz AMEX:SPY, Fetcher-Aufruf 'SPY'. NQ/MNQ: Referenz NASDAQ:QQQ, Fetcher 'QQQ', IV-Index auf CBOE:VXN stellen. Manuelle Options-Level dann in Referenz-Preisen eintragen (z.B. SPY 680 statt ES 6800). Umrechnung über das Vortagesschluss-Verhältnis — inkl. Futures-Basis.")
+refSym = input.symbol("AMEX:SPY", "Referenz-Symbol", group=grpF)
+useRTH = input.bool(true, "Session/ORZ ab US-Cash-Open (09:30 NY)", group=grpF, tooltip="Szenario-Engine, DPZ und Opening Range starten um 09:30 New York statt zur Globex-Eröffnung. Auf Aktien-Charts identisch mit dem Sessionstart.")
+
 grpA = "Statistik-Fallback"
 lenAnchor = input.int(200, "Flow-Anker Länge (Bars)", minval=20, group=grpA)
 
@@ -79,13 +84,20 @@ htf = timeframe.isintraday ? "D" : "W"
 [pdH, pdL, pdC] = request.security(syminfo.tickerid, htf, [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
 sma5D = request.security(syminfo.tickerid, "D", ta.sma(close, 5)[1], lookahead=barmerge.lookahead_on)
 
-// Session-Tracking
+// Referenz-Symbol (Futures-Modus): Vortagesschluss für die Umrechnung
+refC    = request.security(refSym, "D", close[1],             lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+refSma5 = request.security(refSym, "D", ta.sma(close, 5)[1],  lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+// Session-Tracking (wahlweise ab US-Cash-Open 09:30 NY — wichtig für Futures)
 newSes = ta.change(time("D")) != 0
+inRTH  = time(timeframe.period, "0930-1600", "America/New_York")
+rthNew = not na(inRTH) and na(inRTH[1])
+anchorNew = useRTH ? rthNew : newSes
 var float sesO = na
 var float sesH = na
 var float sesL = na
 var int sesStart = na
-if newSes or na(sesO)
+if anchorNew or na(sesO)
     sesO := open
     sesH := high
     sesL := low
@@ -97,7 +109,7 @@ else
 // Opening Range
 var float orH = na
 var float orL = na
-if newSes or na(orH)
+if anchorNew or na(orH)
     orH := high
     orL := low
 else if time - sesStart < orMinutes * 60 * 1000
@@ -110,17 +122,24 @@ iv0  = request.security(vol0Sym, "D", close[1], lookahead=barmerge.lookahead_on,
 skew = request.security(skewSym, "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 pcc  = request.security(pccSym,  "D", close[1], lookahead=barmerge.lookahead_on, ignore_invalid_symbol=true)
 
-ivDay   = nz(iv1, iv0)                     // annualisierte IV in %
-useCboe = levelSource == "CBOE-Optionsdaten" and not na(ivDay) and not na(pdC)
+ivDay = nz(iv1, iv0)                       // annualisierte IV in %
+
+// Futures-Modus: Level entstehen im Referenz-Optionsmarkt (SPY/QQQ) und
+// werden über das Vortagesschluss-Verhältnis auf den Chart skaliert
+convOk = useRef and not na(refC) and refC > 0 and not na(pdC)
+conv   = convOk ? pdC / refC : 1.0
+basePx = convOk ? refC : pdC               // Preisbasis im Referenz-Raum
+
+useCboe = levelSource == "CBOE-Optionsdaten" and not na(ivDay) and not na(basePx)
 
 // Strike-Raster (automatisch nach Preisniveau, wie US-Optionsketten)
-autoStep = pdC < 25 ? 0.5 : pdC < 100 ? 1.0 : pdC < 500 ? 2.5 : pdC < 1000 ? 5.0 : 10.0
+autoStep = basePx < 25 ? 0.5 : basePx < 100 ? 1.0 : basePx < 500 ? 2.5 : basePx < 1000 ? 5.0 : 10.0
 step = strikeStepIn > 0 ? strikeStepIn : autoStep
 f_strike(_p) => math.round(_p / step) * step
 
 // Expected Move aus IV: P × IV/100 × √(t/252)
-em1 = pdC * ivDay / 100 * math.sqrt(1.0 / 252.0)
-em5 = pdC * nz(iv0, ivDay) / 100 * math.sqrt(5.0 / 252.0)
+em1 = basePx * ivDay / 100 * math.sqrt(1.0 / 252.0)
+em5 = basePx * nz(iv0, ivDay) / 100 * math.sqrt(5.0 / 252.0)
 
 // SKEW → Asymmetrie (hoher SKEW = mehr OTM-Put-Nachfrage → Downside weiter)
 skewF = math.min(math.max((nz(skew, 115) - 115) / 100, -0.15), 0.35)
@@ -130,30 +149,32 @@ posBias = nz(pcc, 1.0) - 1.0
 upEM = em1 * (1 - 0.5 * skewF)
 dnEM = em1 * (1 + skewF)
 
-cboeGex  = f_strike(pdC - posBias * 0.5 * em1)
-cboeCall = f_strike(pdC + upEM)
-cboePut  = f_strike(pdC - dnEM)
+// Alle CBOE-Level im Referenz-Raum (werden bei der Zuordnung ×conv skaliert)
+cboeGex  = f_strike(basePx - posBias * 0.5 * em1)
+cboeCall = f_strike(basePx + upEM)
+cboePut  = f_strike(basePx - dnEM)
 cboeCall := math.max(cboeCall, cboeGex + step)
 cboePut  := math.min(cboePut,  cboeGex - step)
-cboeVU   = math.max(f_strike(pdC + math.max(em5, 2 * upEM)), cboeCall + step)
-cboeVD   = math.min(f_strike(pdC - math.max(em5 * (1 + skewF), 2 * dnEM)), cboePut - step)
-cboePain = f_strike(sma5D)
-cboePivot = f_strike((pdH + pdL + pdC) / 3)
+cboeVU   = math.max(f_strike(basePx + math.max(em5, 2 * upEM)), cboeCall + step)
+cboeVD   = math.min(f_strike(basePx - math.max(em5 * (1 + skewF), 2 * dnEM)), cboePut - step)
+cboePain = f_strike(convOk ? nz(refSma5, basePx) : nz(sma5D, basePx))
 
 // ─────────────── Statistik-Fallback (ohne Optionsdaten) ───────────────
 flow  = math.sum(src * vol, lenAnchor) / math.sum(vol, lenAnchor)
 sigma = ta.stdev(src, lenAnchor)
 
 // ─────────────────────── Level-Matrix ───────────────────────
-f_lvl(_manual, _cboe, _stat) => _manual > 0 ? _manual : useCboe ? _cboe : _stat
+// Manuelle und CBOE-Level liegen im Referenz-Raum → ×conv auf den Chart;
+// der Pivot ist Preisstruktur des Charts selbst und bleibt chart-nativ
+f_lvl(_manual, _cboe, _stat) => _manual > 0 ? _manual * conv : useCboe ? _cboe * conv : _stat
 
-gexL   = f_lvl(inGexFlip, cboeGex,   flow)
-callL  = f_lvl(inCall,    cboeCall,  flow + 2 * sigma)
-putL   = f_lvl(inPut,     cboePut,   flow - 2 * sigma)
-vuL    = f_lvl(inVU,      cboeVU,    flow + 3 * sigma)
-vdL    = f_lvl(inVD,      cboeVD,    flow - 3 * sigma)
-painL  = f_lvl(inMaxPain, cboePain,  ta.sma(src, lenAnchor))
-pivotL = f_lvl(inPivot,   cboePivot, (pdH + pdL + pdC) / 3)
+gexL   = f_lvl(inGexFlip, cboeGex,  flow)
+callL  = f_lvl(inCall,    cboeCall, flow + 2 * sigma)
+putL   = f_lvl(inPut,     cboePut,  flow - 2 * sigma)
+vuL    = f_lvl(inVU,      cboeVU,   flow + 3 * sigma)
+vdL    = f_lvl(inVD,      cboeVD,   flow - 3 * sigma)
+painL  = f_lvl(inMaxPain, cboePain, ta.sma(src, lenAnchor))
+pivotL = inPivot > 0 ? inPivot * conv : math.round_to_mintick((pdH + pdL + pdC) / 3)
 
 // Abgeleitete Level (interne Benchmarks wie UDL/LDL im Original)
 udl = gexL + derivFrac * (callL - gexL)
@@ -202,7 +223,7 @@ if src <= gexL and src >= vdL
     dnDen += vol
 upperDPZ = upDen > 0 ? upNum / upDen : math.avg(gexL, vuL)
 lowerDPZ = dnDen > 0 ? dnNum / dnDen : math.avg(gexL, vdL)
-absGexL  = inAbsGex > 0 ? inAbsGex : posGamma ? callL : putL
+absGexL  = inAbsGex > 0 ? inAbsGex * conv : posGamma ? callL : putL
 absGexTx = (inAbsGex > 0 ? (inAbsGex >= gexL ? "CALL" : "PUT") : posGamma ? "CALL" : "PUT") + " @ " + f_fmt(absGexL)
 
 // ─────────────────────── Signale ───────────────────────
@@ -300,7 +321,8 @@ chk(_b) => _b ? "✓" : "✗"
 txtLevels = "PV " + chk(abovePivot) + "  GX " + chk(posGamma) + "  PUT " + chk(close > putL) + "  CALL " + chk(close > callL)
 modeTx = (adxV > 25 ? "Trending" : "Balanced") + " · ATR " + (volaTx == "Loud" ? "Expanded" : volaTx == "Quiet" ? "Compressed" : "Balanced")
 srcTx = useCboe ?
-     "IV " + str.tostring(ivDay, "0.0") + " · EM ±" + f_fmt(em1) + " · SKEW " + str.tostring(nz(skew, 0), "0") + " · P/C " + str.tostring(nz(pcc, 1), "0.00") :
+     "IV " + str.tostring(ivDay, "0.0") + " · EM ±" + f_fmt(em1) + " · SKEW " + str.tostring(nz(skew, 0), "0") + " · P/C " + str.tostring(nz(pcc, 1), "0.00") +
+     (convOk ? "\nRef-Umrechnung ×" + str.tostring(conv, "0.0000") : "") :
      "Statistik-Modus (keine Optionsdaten)"
 
 // ─────────────────────── Matrix-Panel ───────────────────────

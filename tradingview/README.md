@@ -51,6 +51,32 @@ an, welche Quelle gerade aktiv ist (IV, EM, SKEW, P/C-Werte live).
 
 **Level-Priorität:** manuell eingetragen → CBOE-Daten → Statistik.
 
+## Futures: ES / NQ / MES / MNQ
+
+Die GEX-Level entstehen im SPY/SPX- bzw. QQQ/NDX-Optionsmarkt — der
+Futures-Modus rechnet sie automatisch auf deinen Chart um (über das
+Vortagesschluss-Verhältnis, das die Futures-Basis gleich mit erfasst).
+Micros (MES/MNQ) sind datenidentisch zu ES/NQ.
+
+**Setup für ES / MES:**
+1. In den Einstellungen: **"Level von Referenz-Symbol umrechnen"** ✓
+2. Referenz-Symbol: `AMEX:SPY` (Standard)
+3. Level holen: `python3 fetch_gex_levels.py SPY` — Werte in SPY-Preisen
+   eintragen (z.B. 680, nicht 6800); die Skalierung macht der Indikator
+
+**Setup für NQ / MNQ:**
+1. **"Level von Referenz-Symbol umrechnen"** ✓
+2. Referenz-Symbol: `NASDAQ:QQQ`
+3. IV-Index kurzfristig auf `CBOE:VXN` stellen (Nasdaq-Vola statt VIX)
+4. Level holen: `python3 fetch_gex_levels.py QQQ` — Werte in QQQ-Preisen
+   eintragen
+
+**"Session/ORZ ab US-Cash-Open (09:30 NY)"** sollte für Futures aktiv
+bleiben: Szenario-Engine, Opening Range und Dealer-Zonen starten dann mit
+dem US-Cash-Markt (wo die Options-Flows leben) statt mit der
+Globex-Eröffnung um 18:00 ET. Das Panel zeigt den aktiven
+Umrechnungsfaktor unter "Options:" an.
+
 ## Komponenten
 
 - **Level-Matrix**: PAIN, VU, CALL, UDL, GEX, LDL, PIVOT, PUT, VD als
