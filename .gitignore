@@ -26,3 +26,6 @@ coverage/
 *.info
 
 TwyneAddresses_output.json
+# Python
+__pycache__/
+*.pyc
