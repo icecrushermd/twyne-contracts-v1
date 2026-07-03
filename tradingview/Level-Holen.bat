@@ -11,7 +11,7 @@ if errorlevel 1 goto err
 echo.
 %PY% fetch_gex_levels.py QQQ --patch GEXR_Style_Matrix.pine
 if errorlevel 1 goto err
-clip < GEXR_Style_Matrix.pine
+powershell -NoProfile -Command "Set-Clipboard -Value (Get-Content -Raw -Encoding UTF8 'GEXR_Style_Matrix.pine')"
 echo.
 echo ============================================
 echo   FERTIG! Der Indikator-Code liegt in der
