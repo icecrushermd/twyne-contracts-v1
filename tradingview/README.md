@@ -1,111 +1,86 @@
-# GEXR-Style Matrix PRO (Pine Script v5)
+# GEXR-Style Matrix PRO — Zero-Config (Pine Script v5)
 
 Open-Source-Indikator für TradingView im Stil des geschützten "GEXR Matrix"
-(TheRealDrip2Rip) — gleicher Funktionsumfang, plus Extras.
+(TheRealDrip2Rip) — gleicher Funktionsumfang, plus Automatik-Extras.
 
 ## Installation
 
 1. TradingView öffnen → unten **Pine Editor** aufklappen
 2. Inhalt von `GEXR_Style_Matrix.pine` einfügen
-3. **Speichern** → **Zum Chart hinzufügen**
+3. **Speichern** → **Zum Chart hinzufügen** — fertig, keine Einstellungen nötig
 
-## Bedienung
+## Zero-Config: erkennt das Symbol selbst
 
-### Options-Level eintragen (empfohlen)
-
-Pine Script hat keinen Zugriff auf Options-Open-Interest. Trage daher die
-Level täglich aus deiner GEX-Datenquelle (z.B. GEXBot, TanukiTrade,
-SpotGamma, unusualwhales) in den Indikator-Einstellungen unter
-**"Options-Level"** ein:
-
-| Feld | Bedeutung |
-|---|---|
-| Max Pain | Max-Pain-Strike (Magnetlevel) |
-| GEX Flip | Zero-Gamma-Level — darüber positives, darunter negatives Gamma |
-| Dealer Pivot | Struktureller Entscheidungslevel |
-| Call Wall / Put Wall | Größte positive/negative GEX-Strikes |
-| VU / VD | Volatilitäts-Trigger oben/unten (Korridor-Ränder) |
-| Abs GEX Strike | Strike mit dem größten absoluten GEX |
-
-### Auto-Modus: CBOE-Optionsdaten (Standard)
-
-Felder, die auf **0** stehen, werden automatisch berechnet — standardmäßig
-aus echten CBOE-Optionsmarktdaten, genau wie es das Original macht:
-
-- **VIX1D / VIX** → Expected Move: `Preis × IV/100 × √(t/252)` →
-  Call/Put Wall (±1-Tages-EM) und VD/VU-Korridor (5-Tages-EM)
-- **SKEW-Index** → Asymmetrie: hoher Skew schiebt die Downside-Level
-  weiter nach unten (mehr OTM-Put-Nachfrage)
-- **Put/Call-Ratio (USI:PCC)** → Positionierungs-Bias verschiebt den
-  GEX-Flip-Proxy
-- Alle Level werden aufs **Strike-Raster gerundet** (automatisch nach
-  Preisniveau, z.B. 2.5er-Schritte bei SPY) und basieren auf den
-  **Vortagesschlusskursen** der Indizes — sie stehen damit ab der
-  Eröffnung fest, wandern intraday nicht und repainten nicht
-
-Für Nicht-US-Index-Symbole (Einzelaktien, Krypto) die IV-Index-Symbole
-anpassen (z.B. `CBOE:VXN` für NDX/QQQ, `CBOE:VXAPL` für Apple) oder auf
-**"Statistisch (Preis/Volumen)"** umschalten — dann werden volumengewichtete
-Sigma-Bänder als Proxy genutzt. Das Panel zeigt unter **"Options:"** immer
-an, welche Quelle gerade aktiv ist (IV, EM, SKEW, P/C-Werte live).
-
-**Level-Priorität:** manuell eingetragen → CBOE-Daten → Statistik.
-
-## Futures: ES / NQ / MES / MNQ
-
-Die GEX-Level entstehen im SPY/SPX- bzw. QQQ/NDX-Optionsmarkt — der
-Futures-Modus rechnet sie automatisch auf deinen Chart um (über das
-Vortagesschluss-Verhältnis, das die Futures-Basis gleich mit erfasst).
-Micros (MES/MNQ) sind datenidentisch zu ES/NQ.
-
-**Symbol-Automatik (Standard: an):** Der Indikator erkennt das
-Chart-Symbol am Root (inkl. Micros) und stellt Referenz-Symbol und
-IV-Indizes selbst um — kein Umschalten beim Wechsel zwischen Charts:
+Der Indikator liest das Chart-Symbol und wählt automatisch den passenden
+Options-Referenzmarkt, IV-Index und Modus — egal ob Future, Micro,
+Index-CFD oder ETF:
 
 | Chart | Referenz | IV-Index |
 |---|---|---|
-| ES / MES | SPY | VIX1D / VIX |
-| NQ / MNQ | QQQ | VXN |
-| RTY / M2K | IWM | RVX |
-| YM / MYM | DIA | VXD |
+| ES / MES / SPX / US500 / SPY | SPY | VIX1D / VIX |
+| NQ / MNQ / NDX / NAS100 / US100 / QQQ | QQQ | VXN |
+| RTY / M2K / RUT / US2000 / IWM | IWM | RVX |
+| YM / MYM / DJI / US30 / DIA | DIA | VXD |
+| GC / MGC / GLD (Gold) | GLD | GVZ |
+| SI / SIL / SLV (Silber) | SLV | VXSLV |
+| CL / MCL / USO (Öl) | USO | OVX |
+| BTC / MBT / BTC-Spot / IBIT | IBIT | Statistik |
+| ETH / MET / ETH-Spot / ETHA | ETHA | Statistik |
+| alles andere (Aktien, Forex, …) | Chart selbst | Statistik |
 
-Manuelle Level haben **eigene Eingabe-Blöcke pro Markt**: "Options-Level
-ES/MES" (in SPY-Preisen) und "Options-Level NQ/MNQ" (in QQQ-Preisen).
-Beide morgens füllen, dann beliebig zwischen ES- und NQ-Chart springen —
-es greift automatisch der richtige Satz. Der Fetcher schreibt mit
-`--patch` selbst in den passenden Block:
+Futures-Level werden über das Vortagesschluss-Verhältnis zum Referenz-ETF
+skaliert (inkl. Basis). Ohne passenden IV-Index schaltet der Indikator
+selbstständig auf volumengewichtete Statistik-Level um. Session, Opening
+Range und Dealer-Zonen ankern am US-Cash-Open (09:30 NY); Symbole ohne
+NY-Handel nutzen automatisch den Tageswechsel. Das Panel zeigt unter
+**"Profil:"** an, was erkannt wurde.
+
+**Die einzigen Einstellungen:** Panel an/aus, Trend-Ribbon an/aus,
+Signale an/aus, Panel-Position. Alles andere ist Automatik oder
+bewährter Festwert.
+
+## Level-Quellen (Priorität)
+
+1. **Manuell eingetragen** (empfohlen): echte Open-Interest-Level, per
+   Fetcher-Skript aus der kostenlosen CBOE-Optionskette berechnet
+2. **CBOE-IV-Schätzung**: Expected Move aus VIX1D/VXN/GVZ/OVX…, SKEW-
+   Asymmetrie, Put/Call-Bias — Level stehen ab der Eröffnung fest,
+   kein Repaint
+3. **Statistik**: volumengewichteter Flow-Anker ± Sigma-Bänder
+
+## Morgen-Routine (2 Minuten)
 
 ```
 python3 fetch_gex_levels.py SPY --patch GEXR_Style_Matrix.pine
 python3 fetch_gex_levels.py QQQ --patch GEXR_Style_Matrix.pine
 ```
 
-Danach einmal den Dateiinhalt in den Pine Editor kopieren — beide Märkte
-sind versorgt. Bei anderen Symbolen (GLD, IBIT, Aktien …) gilt der Block
-"Options-Level andere Symbole" plus die manuellen Referenz-Einstellungen.
-
-**"Session/ORZ ab US-Cash-Open (09:30 NY)"** sollte für Futures aktiv
-bleiben: Szenario-Engine, Opening Range und Dealer-Zonen starten dann mit
-dem US-Cash-Markt (wo die Options-Flows leben) statt mit der
-Globex-Eröffnung um 18:00 ET. Das Panel zeigt den aktiven
-Umrechnungsfaktor unter "Options:" an.
+Das Skript lädt die CBOE-Kette (kostenlos, kein Account), berechnet
+GEX Flip, Call/Put Wall, Max Pain und Abs GEX und schreibt sie in den
+passenden Eingabe-Block (SPY→ES-Block, QQQ→NQ-Block, alles andere→
+generischer Block). Danach Dateiinhalt in den Pine Editor kopieren,
+speichern — ES und NQ sind gleichzeitig versorgt. Manuelle Level immer
+in **Referenz-Preisen** eintragen (SPY 680, nicht ES 6800); die
+Umrechnung macht der Indikator. Andere Märkte genauso, z.B.
+`python3 fetch_gex_levels.py GLD --patch …` für Gold oder `IBIT` für
+Bitcoin.
 
 ## Komponenten
 
 - **Level-Matrix**: PAIN, VU, CALL, UDL, GEX, LDL, PIVOT, PUT, VD als
-  beschriftete Linien; dazu Opening-Range-Zone (ORZ H/L) intraday
-- **Matrix-Panel**: FLOW, SCENARIO ENGINE (Open/Action/Read), THE PATH
-  (Bias/Sequence/Next), THE TURN (Flip-Bedingungen), LIVE STATUS, DEALER
-  (Upper/Lower DPZ, Abs GEX) — Texte aktualisieren sich live
-- **Dealer Pressure Zones**: volumengewichteter Preis der Trades innerhalb
-  des oberen/unteren Gamma-Korridors der laufenden Session
-- **Trend-Ribbon + Signale**: LONG/SHORT nur bei Konfluenz aus Gamma-Regime,
-  Levelbruch (GEX/UDL/LDL), Trend und RSI — mit Cooldown
+  beschriftete Linien; Opening-Range (ORZ H/L) intraday
+- **Matrix-Panel**: FLOW (Profil, Pressure, Break, Corridor, Options,
+  ATR Story, Alignment), SCENARIO ENGINE (Open/Action/Read), THE PATH
+  (Bias/Sequence/Next), THE TURN (Flip-Bedingungen), LIVE STATUS,
+  DEALER (Upper/Lower DPZ, Abs GEX)
+- **Dealer Pressure Zones**: volumengewichteter Preis der Session-Trades
+  innerhalb des oberen/unteren Gamma-Korridors
+- **Trend-Ribbon + Signale**: LONG/SHORT nur bei Konfluenz aus
+  Gamma-Regime, Levelbruch (GEX/UDL/LDL), Trend und RSI — mit Cooldown
 - **Alerts**: Long/Short-Setup, GEX Flip verloren/zurückerobert, Pivot
   verloren/zurückerobert, Call/Put Wall getestet
 
 ## Hinweis
 
-Kein Anlagerat. Die Auto-Level sind statistische Näherungen, keine echten
-Options-Flow-Daten — für präzise GEX-Level immer eine echte Datenquelle
-eintragen.
+Kein Anlagerat. IV- und Statistik-Level sind Näherungen — für präzise
+Walls morgens die Fetcher-Werte eintragen (echtes Open Interest).
