@@ -29,6 +29,7 @@ Nur Python-Standardbibliothek, keine Abhängigkeiten. Kein Anlagerat.
 import argparse
 import datetime as dt
 import json
+import math
 import re
 import sys
 import urllib.request
@@ -50,7 +51,7 @@ def fetch_chain(symbol: str) -> dict:
 
 
 def parse_options(raw: dict, max_days: int):
-    """Liefert (spot, Liste[(expiry, strike, cp, oi, gamma)])."""
+    """Liefert (spot, Liste[(expiry, strike, cp, oi, gamma, iv, T_jahre)])."""
     data = raw.get("data", raw)
     spot = None
     for key in ("current_price", "close", "last", "price"):
@@ -74,16 +75,53 @@ def parse_options(raw: dict, max_days: int):
         strike = int(m.group("strike")) / 1000.0
         oi = float(o.get("open_interest") or 0)
         gamma = float(o.get("gamma") or 0)
-        out.append((expiry, strike, m.group("cp"), oi, gamma))
+        iv = float(o.get("iv") or 0)
+        if iv > 3:          # falls in Prozent geliefert
+            iv /= 100.0
+        t_years = max(days, 0.5) / 365.0
+        out.append((expiry, strike, m.group("cp"), oi, gamma, iv, t_years))
     if not out:
         sys.exit("Fehler: keine passenden Optionen gefunden (Zeitfenster zu klein?).")
     return spot, out
 
 
+def bs_gamma(s: float, k: float, sigma: float, t: float) -> float:
+    """Black-Scholes-Gamma (r≈0) — identisch für Calls und Puts."""
+    if s <= 0 or k <= 0 or sigma <= 0 or t <= 0:
+        return 0.0
+    d1 = (math.log(s / k) + 0.5 * sigma * sigma * t) / (sigma * math.sqrt(t))
+    return math.exp(-0.5 * d1 * d1) / math.sqrt(2 * math.pi) / (s * sigma * math.sqrt(t))
+
+
+def gamma_flip(spot: float, options: list):
+    """Zero-Gamma-Level: Netto-Dealer-GEX als Funktion des Kurses (±10%),
+    Nulldurchgang nächst am Spot (Perfiliev-Methode)."""
+    usable = [(k, cp, oi, iv, t) for _, k, cp, oi, _, iv, t in options
+              if oi > 0 and iv > 0 and t > 0]
+    if not usable:
+        return None
+    flip, best_dist = None, float("inf")
+    prev_s, prev_g = None, None
+    for i in range(41):
+        s = spot * (0.90 + i * 0.005)
+        tot = 0.0
+        for k, cp, oi, iv, t in usable:
+            g = bs_gamma(s, k, iv, t) * oi * 100 * s * s * 0.01
+            tot += g if cp == "C" else -g
+        if prev_g is not None and prev_g * tot < 0:
+            frac = abs(prev_g) / (abs(prev_g) + abs(tot))
+            cross = prev_s + frac * (s - prev_s)
+            if abs(cross - spot) < best_dist:
+                best_dist = abs(cross - spot)
+                flip = cross
+        prev_s, prev_g = s, tot
+    return flip
+
+
 def compute_levels(spot: float, options: list):
-    # Netto-GEX je Strike (Calls +, Puts −), in Mrd. USD pro 1% Move
+    # Netto-GEX je Strike (Calls +, Puts −) am aktuellen Spot
     gex_by_strike: dict[float, float] = {}
-    for _, strike, cp, oi, gamma in options:
+    for _, strike, cp, oi, gamma, _, _ in options:
         gex = gamma * oi * 100 * spot * spot * 0.01
         gex_by_strike[strike] = gex_by_strike.get(strike, 0.0) + (gex if cp == "C" else -gex)
 
@@ -92,25 +130,25 @@ def compute_levels(spot: float, options: list):
     put_wall = min(strikes, key=lambda k: gex_by_strike[k])
     abs_gex = max(strikes, key=lambda k: abs(gex_by_strike[k]))
 
-    # GEX Flip: Vorzeichenwechsel des kumulierten GEX, Kreuzung nächst am Spot
-    flip = None
-    best_dist = float("inf")
-    cum = 0.0
-    prev_cum, prev_k = None, None
-    for k in strikes:
-        cum += gex_by_strike[k]
-        if prev_cum is not None and prev_cum * cum < 0:
-            # linear interpolieren zwischen prev_k und k
-            frac = abs(prev_cum) / (abs(prev_cum) + abs(cum))
-            cross = prev_k + frac * (k - prev_k)
-            if abs(cross - spot) < best_dist:
-                best_dist = abs(cross - spot)
-                flip = cross
-        prev_cum, prev_k = cum, k
+    # GEX Flip über das Gamma-Profil (korrekt); Fallback: kumulierte Strikes
+    flip = gamma_flip(spot, options)
+    if flip is None:
+        cum = 0.0
+        prev_cum, prev_k = None, None
+        best_dist = float("inf")
+        for k in strikes:
+            cum += gex_by_strike[k]
+            if prev_cum is not None and prev_cum * cum < 0:
+                frac = abs(prev_cum) / (abs(prev_cum) + abs(cum))
+                cross = prev_k + frac * (k - prev_k)
+                if abs(cross - spot) < best_dist:
+                    best_dist = abs(cross - spot)
+                    flip = cross
+            prev_cum, prev_k = cum, k
 
     # Max Pain: nur der nächste Verfall
     nearest_exp = min(e for e, *_ in options)
-    near = [(s, cp, oi) for e, s, cp, oi, _ in options if e == nearest_exp]
+    near = [(s, cp, oi) for e, s, cp, oi, _, _, _ in options if e == nearest_exp]
     near_strikes = sorted({s for s, _, _ in near})
 
     def pain(price: float) -> float:
