@@ -1,0 +1,565 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1100" font-family="Courier New, Courier, monospace" fill="#1a1a1a">
+<rect x="0" y="0" width="1600" height="1100" fill="#fdfdf8"/>
+<rect x="25" y="25" width="1550" height="1050" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+<rect x="33" y="33" width="1534" height="1034" fill="none" stroke="#1a1a1a" stroke-width="0.8"/>
+<rect x="130" y="78" width="132" height="844" fill="none" stroke="#1a1a1a" stroke-width="1.4"/>
+<line x1="200" y1="78" x2="200" y2="922" stroke="#1a1a1a" stroke-width="0.9"/>
+<line x1="130" y1="106" x2="262" y2="106" stroke="#1a1a1a" stroke-width="0.9"/>
+<text x="165.0" y="91" font-size="9.5" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >Baugr.-</text>
+<text x="165.0" y="102" font-size="9.5" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >Nr.</text>
+<text x="231.0" y="91" font-size="9.5" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >DSL/3Ph</text>
+<text x="231.0" y="102" font-size="9.5" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >-Nr.</text>
+<text x="105" y="500.0" font-size="15" fill="#1a1a1a" text-anchor="middle" font-weight="bold" transform="rotate(-90 105 500.0)" letter-spacing="3">E30 Unterstation</text>
+<text x="165.0" y="122" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >1a</text>
+<text x="231.0" y="122" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >1</text>
+<line x1="262" y1="118" x2="322" y2="118" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="105" x2="349" y2="131"/>
+<line x1="323" y1="131" x2="349" y2="105"/>
+</g>
+<polygon points="324,110 335,118 324,126" fill="#1f8a1f"/>
+<polygon points="348,110 337,118 348,126" fill="#1f8a1f"/>
+<text x="336" y="86" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/014</text>
+<text x="336" y="100" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="142" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1/1</text>
+<line x1="350" y1="118" x2="460" y2="118" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="105" x2="487" y2="131"/>
+<line x1="461" y1="131" x2="487" y2="105"/>
+</g>
+<polygon points="462,110 473,118 462,126" fill="#1f8a1f"/>
+<polygon points="486,110 475,118 486,126" fill="#1f8a1f"/>
+<text x="474" y="86" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/022</text>
+<text x="474" y="100" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="474" y="142" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1/2</text>
+<line x1="488" y1="118" x2="598" y2="118" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="105" x2="625" y2="131"/>
+<line x1="599" y1="131" x2="625" y2="105"/>
+</g>
+<polygon points="600,110 611,118 600,126" fill="#1f8a1f"/>
+<polygon points="624,110 613,118 624,126" fill="#1f8a1f"/>
+<text x="612" y="86" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="612" y="100" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="612" y="142" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1/3</text>
+<text x="165.0" y="192" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >1b</text>
+<text x="231.0" y="192" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >1</text>
+<line x1="130" y1="157.0" x2="262" y2="157.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="188" x2="322" y2="188" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="175" x2="349" y2="201"/>
+<line x1="323" y1="201" x2="349" y2="175"/>
+</g>
+<polygon points="324,180 335,188 324,196" fill="#1f8a1f"/>
+<polygon points="348,180 337,188 348,196" fill="#1f8a1f"/>
+<text x="336" y="156" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/014</text>
+<text x="336" y="170" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="212" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2/1</text>
+<line x1="350" y1="188" x2="460" y2="188" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="175" x2="487" y2="201"/>
+<line x1="461" y1="201" x2="487" y2="175"/>
+</g>
+<polygon points="462,180 473,188 462,196" fill="#1f8a1f"/>
+<polygon points="486,180 475,188 486,196" fill="#1f8a1f"/>
+<text x="474" y="156" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >Außen</text>
+<text x="474" y="170" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="212" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2/2</text>
+<line x1="488" y1="188" x2="598" y2="188" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="175" x2="625" y2="201"/>
+<line x1="599" y1="201" x2="625" y2="175"/>
+</g>
+<polygon points="600,180 611,188 600,196" fill="#1f8a1f"/>
+<polygon points="624,180 613,188 624,196" fill="#1f8a1f"/>
+<text x="612" y="156" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/022</text>
+<text x="612" y="170" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="212" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2/3</text>
+<line x1="626" y1="188" x2="736" y2="188" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="175" x2="763" y2="201"/>
+<line x1="737" y1="201" x2="763" y2="175"/>
+</g>
+<polygon points="738,180 749,188 738,196" fill="#1f8a1f"/>
+<polygon points="762,180 751,188 762,196" fill="#1f8a1f"/>
+<text x="750" y="156" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="750" y="170" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="212" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2/4</text>
+<text x="165.0" y="262" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2a</text>
+<text x="231.0" y="262" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2</text>
+<line x1="130" y1="227.0" x2="262" y2="227.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="258" x2="322" y2="258" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="245" x2="349" y2="271"/>
+<line x1="323" y1="271" x2="349" y2="245"/>
+</g>
+<polygon points="324,250 335,258 324,266" fill="#1f8a1f"/>
+<polygon points="348,250 337,258 348,266" fill="#1f8a1f"/>
+<text x="336" y="226" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/010</text>
+<text x="336" y="240" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="282" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >3/1</text>
+<line x1="350" y1="258" x2="460" y2="258" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="245" x2="487" y2="271"/>
+<line x1="461" y1="271" x2="487" y2="245"/>
+</g>
+<polygon points="462,250 473,258 462,266" fill="#1f8a1f"/>
+<polygon points="486,250 475,258 486,266" fill="#1f8a1f"/>
+<text x="474" y="226" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/023</text>
+<text x="474" y="240" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="474" y="282" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >3/2</text>
+<line x1="488" y1="258" x2="598" y2="258" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="245" x2="625" y2="271"/>
+<line x1="599" y1="271" x2="625" y2="245"/>
+</g>
+<polygon points="600,250 611,258 600,266" fill="#1f8a1f"/>
+<polygon points="624,250 613,258 624,266" fill="#1f8a1f"/>
+<text x="612" y="226" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="612" y="240" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="612" y="282" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >3/3</text>
+<line x1="626" y1="258" x2="736" y2="258" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="245" x2="763" y2="271"/>
+<line x1="737" y1="271" x2="763" y2="245"/>
+</g>
+<polygon points="738,250 749,258 738,266" fill="#1f8a1f"/>
+<polygon points="762,250 751,258 762,266" fill="#1f8a1f"/>
+<text x="750" y="226" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="750" y="240" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="750" y="282" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >3/4</text>
+<text x="165.0" y="332" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2b</text>
+<text x="231.0" y="332" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2</text>
+<line x1="130" y1="297.0" x2="262" y2="297.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="328" x2="322" y2="328" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="315" x2="349" y2="341"/>
+<line x1="323" y1="341" x2="349" y2="315"/>
+</g>
+<polygon points="324,320 335,328 324,336" fill="#1f8a1f"/>
+<polygon points="348,320 337,328 348,336" fill="#1f8a1f"/>
+<text x="336" y="296" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="336" y="310" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="352" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >4/1</text>
+<line x1="350" y1="328" x2="460" y2="328" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="315" x2="487" y2="341"/>
+<line x1="461" y1="341" x2="487" y2="315"/>
+</g>
+<polygon points="462,320 473,328 462,336" fill="#1f8a1f"/>
+<polygon points="486,320 475,328 486,336" fill="#1f8a1f"/>
+<text x="474" y="296" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/023</text>
+<text x="474" y="310" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="352" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >4/2</text>
+<line x1="488" y1="328" x2="598" y2="328" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="315" x2="625" y2="341"/>
+<line x1="599" y1="341" x2="625" y2="315"/>
+</g>
+<polygon points="600,320 611,328 600,336" fill="#1f8a1f"/>
+<polygon points="624,320 613,328 624,336" fill="#1f8a1f"/>
+<text x="612" y="296" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="612" y="310" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="352" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >4/3</text>
+<line x1="626" y1="328" x2="736" y2="328" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="315" x2="763" y2="341"/>
+<line x1="737" y1="341" x2="763" y2="315"/>
+</g>
+<polygon points="738,320 749,328 738,336" fill="#1f8a1f"/>
+<polygon points="762,320 751,328 762,336" fill="#1f8a1f"/>
+<text x="750" y="296" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/024</text>
+<text x="750" y="310" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="352" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >4/4</text>
+<text x="165.0" y="402" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >3a</text>
+<text x="231.0" y="402" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >3</text>
+<line x1="130" y1="367.0" x2="262" y2="367.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="398" x2="322" y2="398" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="385" x2="349" y2="411"/>
+<line x1="323" y1="411" x2="349" y2="385"/>
+</g>
+<polygon points="324,390 335,398 324,406" fill="#1f8a1f"/>
+<polygon points="348,390 337,398 348,406" fill="#1f8a1f"/>
+<text x="336" y="366" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/113</text>
+<text x="336" y="380" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="422" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >5/1</text>
+<line x1="350" y1="398" x2="460" y2="398" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="385" x2="487" y2="411"/>
+<line x1="461" y1="411" x2="487" y2="385"/>
+</g>
+<polygon points="462,390 473,398 462,406" fill="#1f8a1f"/>
+<polygon points="486,390 475,398 486,406" fill="#1f8a1f"/>
+<text x="474" y="366" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/113</text>
+<text x="474" y="380" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="474" y="422" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >5/2</text>
+<line x1="488" y1="398" x2="598" y2="398" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="385" x2="625" y2="411"/>
+<line x1="599" y1="411" x2="625" y2="385"/>
+</g>
+<polygon points="600,390 611,398 600,406" fill="#1f8a1f"/>
+<polygon points="624,390 613,398 624,406" fill="#1f8a1f"/>
+<text x="612" y="366" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1.OG/214</text>
+<text x="612" y="380" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="612" y="422" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >5/3</text>
+<text x="165.0" y="472" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >3b</text>
+<text x="231.0" y="472" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >3</text>
+<line x1="130" y1="437.0" x2="262" y2="437.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="468" x2="322" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="455" x2="349" y2="481"/>
+<line x1="323" y1="481" x2="349" y2="455"/>
+</g>
+<polygon points="324,460 335,468 324,476" fill="#1f8a1f"/>
+<polygon points="348,460 337,468 348,476" fill="#1f8a1f"/>
+<text x="336" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/113</text>
+<text x="336" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/1</text>
+<line x1="350" y1="468" x2="460" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="455" x2="487" y2="481"/>
+<line x1="461" y1="481" x2="487" y2="455"/>
+</g>
+<polygon points="462,460 473,468 462,476" fill="#1f8a1f"/>
+<polygon points="486,460 475,468 486,476" fill="#1f8a1f"/>
+<text x="474" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >Außen</text>
+<text x="474" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/2</text>
+<line x1="488" y1="468" x2="598" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="455" x2="625" y2="481"/>
+<line x1="599" y1="481" x2="625" y2="455"/>
+</g>
+<polygon points="600,460 611,468 600,476" fill="#1f8a1f"/>
+<polygon points="624,460 613,468 624,476" fill="#1f8a1f"/>
+<text x="612" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/113</text>
+<text x="612" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/3</text>
+<line x1="626" y1="468" x2="736" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="455" x2="763" y2="481"/>
+<line x1="737" y1="481" x2="763" y2="455"/>
+</g>
+<polygon points="738,460 749,468 738,476" fill="#1f8a1f"/>
+<polygon points="762,460 751,468 762,476" fill="#1f8a1f"/>
+<text x="750" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/022</text>
+<text x="750" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/4</text>
+<line x1="764" y1="468" x2="874" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="875" y1="455" x2="901" y2="481"/>
+<line x1="875" y1="481" x2="901" y2="455"/>
+</g>
+<polygon points="876,460 887,468 876,476" fill="#1f8a1f"/>
+<polygon points="900,460 889,468 900,476" fill="#1f8a1f"/>
+<text x="888" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1.OG/214</text>
+<text x="888" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="888" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/5</text>
+<line x1="902" y1="468" x2="1012" y2="468" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="1013" y1="455" x2="1039" y2="481"/>
+<line x1="1013" y1="481" x2="1039" y2="455"/>
+</g>
+<polygon points="1014,460 1025,468 1014,476" fill="#1f8a1f"/>
+<polygon points="1038,460 1027,468 1038,476" fill="#1f8a1f"/>
+<text x="1026" y="436" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2.OG/313</text>
+<text x="1026" y="450" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="1026" y="492" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >6/6</text>
+<text x="165.0" y="542" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >4a</text>
+<text x="231.0" y="542" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2</text>
+<line x1="130" y1="507.0" x2="262" y2="507.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="538" x2="322" y2="538" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="525" x2="349" y2="551"/>
+<line x1="323" y1="551" x2="349" y2="525"/>
+</g>
+<polygon points="324,530 335,538 324,546" fill="#1f8a1f"/>
+<polygon points="348,530 337,538 348,546" fill="#1f8a1f"/>
+<text x="336" y="506" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/114</text>
+<text x="336" y="520" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="562" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >7/1</text>
+<line x1="350" y1="538" x2="460" y2="538" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="525" x2="487" y2="551"/>
+<line x1="461" y1="551" x2="487" y2="525"/>
+</g>
+<polygon points="462,530 473,538 462,546" fill="#1f8a1f"/>
+<polygon points="486,530 475,538 486,546" fill="#1f8a1f"/>
+<text x="474" y="506" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/114</text>
+<text x="474" y="520" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="474" y="562" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >7/2</text>
+<text x="165.0" y="612" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >4b</text>
+<text x="231.0" y="612" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >2</text>
+<line x1="130" y1="577.0" x2="262" y2="577.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="608" x2="322" y2="608" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="595" x2="349" y2="621"/>
+<line x1="323" y1="621" x2="349" y2="595"/>
+</g>
+<polygon points="324,600 335,608 324,616" fill="#1f8a1f"/>
+<polygon points="348,600 337,608 348,616" fill="#1f8a1f"/>
+<text x="336" y="576" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/114</text>
+<text x="336" y="590" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="336" y="632" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >8/1</text>
+<line x1="350" y1="608" x2="460" y2="608" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="595" x2="487" y2="621"/>
+<line x1="461" y1="621" x2="487" y2="595"/>
+</g>
+<polygon points="462,600 473,608 462,616" fill="#1f8a1f"/>
+<polygon points="486,600 475,608 486,616" fill="#1f8a1f"/>
+<text x="474" y="576" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/114</text>
+<text x="474" y="590" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="632" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >8/2</text>
+<text x="165.0" y="682" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >5a</text>
+<text x="231.0" y="682" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >4</text>
+<line x1="130" y1="647.0" x2="262" y2="647.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="678" x2="322" y2="678" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="665" x2="349" y2="691"/>
+<line x1="323" y1="691" x2="349" y2="665"/>
+</g>
+<polygon points="324,670 335,678 324,686" fill="#1f8a1f"/>
+<polygon points="348,670 337,678 348,686" fill="#1f8a1f"/>
+<text x="336" y="646" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/115</text>
+<text x="336" y="660" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="702" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >9/1</text>
+<line x1="350" y1="678" x2="460" y2="678" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="665" x2="487" y2="691"/>
+<line x1="461" y1="691" x2="487" y2="665"/>
+</g>
+<polygon points="462,670 473,678 462,686" fill="#1f8a1f"/>
+<polygon points="486,670 475,678 486,686" fill="#1f8a1f"/>
+<text x="474" y="646" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/115</text>
+<text x="474" y="660" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="474" y="702" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >9/2</text>
+<line x1="488" y1="678" x2="598" y2="678" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="665" x2="625" y2="691"/>
+<line x1="599" y1="691" x2="625" y2="665"/>
+</g>
+<polygon points="600,670 611,678 600,686" fill="#1f8a1f"/>
+<polygon points="624,670 613,678 624,686" fill="#1f8a1f"/>
+<text x="612" y="646" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/116</text>
+<text x="612" y="660" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="702" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >9/3</text>
+<line x1="626" y1="678" x2="736" y2="678" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="665" x2="763" y2="691"/>
+<line x1="737" y1="691" x2="763" y2="665"/>
+</g>
+<polygon points="738,670 749,678 738,686" fill="#1f8a1f"/>
+<polygon points="762,670 751,678 762,686" fill="#1f8a1f"/>
+<text x="750" y="646" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/116</text>
+<text x="750" y="660" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="702" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >9/4</text>
+<line x1="764" y1="678" x2="874" y2="678" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="875" y1="665" x2="901" y2="691"/>
+<line x1="875" y1="691" x2="901" y2="665"/>
+</g>
+<polygon points="876,670 887,678 876,686" fill="#1f8a1f"/>
+<polygon points="900,670 889,678 900,686" fill="#1f8a1f"/>
+<text x="888" y="646" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/120</text>
+<text x="888" y="660" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="888" y="702" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >9/5</text>
+<text x="165.0" y="752" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >5b</text>
+<text x="231.0" y="752" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >4</text>
+<line x1="130" y1="717.0" x2="262" y2="717.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="748" x2="322" y2="748" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="735" x2="349" y2="761"/>
+<line x1="323" y1="761" x2="349" y2="735"/>
+</g>
+<polygon points="324,740 335,748 324,756" fill="#1f8a1f"/>
+<polygon points="348,740 337,748 348,756" fill="#1f8a1f"/>
+<text x="336" y="716" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/115</text>
+<text x="336" y="730" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="336" y="772" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >10/1</text>
+<line x1="350" y1="748" x2="460" y2="748" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="735" x2="487" y2="761"/>
+<line x1="461" y1="761" x2="487" y2="735"/>
+</g>
+<polygon points="462,740 473,748 462,756" fill="#1f8a1f"/>
+<polygon points="486,740 475,748 486,756" fill="#1f8a1f"/>
+<text x="474" y="716" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/115</text>
+<text x="474" y="730" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="772" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >10/2</text>
+<line x1="488" y1="748" x2="598" y2="748" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="735" x2="625" y2="761"/>
+<line x1="599" y1="761" x2="625" y2="735"/>
+</g>
+<polygon points="600,740 611,748 600,756" fill="#1f8a1f"/>
+<polygon points="624,740 613,748 624,756" fill="#1f8a1f"/>
+<text x="612" y="716" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/116</text>
+<text x="612" y="730" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="772" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >10/3</text>
+<line x1="626" y1="748" x2="736" y2="748" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="735" x2="763" y2="761"/>
+<line x1="737" y1="761" x2="763" y2="735"/>
+</g>
+<polygon points="738,740 749,748 738,756" fill="#1f8a1f"/>
+<polygon points="762,740 751,748 762,756" fill="#1f8a1f"/>
+<text x="750" y="716" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/120</text>
+<text x="750" y="730" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="772" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >10/4</text>
+<text x="165.0" y="822" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >6a</text>
+<text x="231.0" y="822" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >5</text>
+<line x1="130" y1="787.0" x2="262" y2="787.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="818" x2="322" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="805" x2="349" y2="831"/>
+<line x1="323" y1="831" x2="349" y2="805"/>
+</g>
+<polygon points="324,810 335,818 324,826" fill="#1f8a1f"/>
+<polygon points="348,810 337,818 348,826" fill="#1f8a1f"/>
+<text x="336" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/121</text>
+<text x="336" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="336" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/1</text>
+<line x1="350" y1="818" x2="460" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="805" x2="487" y2="831"/>
+<line x1="461" y1="831" x2="487" y2="805"/>
+</g>
+<polygon points="462,810 473,818 462,826" fill="#1f8a1f"/>
+<polygon points="486,810 475,818 486,826" fill="#1f8a1f"/>
+<text x="474" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >Außen</text>
+<text x="474" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/2</text>
+<line x1="488" y1="818" x2="598" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="805" x2="625" y2="831"/>
+<line x1="599" y1="831" x2="625" y2="805"/>
+</g>
+<polygon points="600,810 611,818 600,826" fill="#1f8a1f"/>
+<polygon points="624,810 613,818 624,826" fill="#1f8a1f"/>
+<text x="612" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >KG/029</text>
+<text x="612" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="612" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/3</text>
+<line x1="626" y1="818" x2="736" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="805" x2="763" y2="831"/>
+<line x1="737" y1="831" x2="763" y2="805"/>
+</g>
+<polygon points="738,810 749,818 738,826" fill="#1f8a1f"/>
+<polygon points="762,810 751,818 762,826" fill="#1f8a1f"/>
+<text x="750" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/121</text>
+<text x="750" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="750" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/4</text>
+<line x1="764" y1="818" x2="874" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="875" y1="805" x2="901" y2="831"/>
+<line x1="875" y1="831" x2="901" y2="805"/>
+</g>
+<polygon points="876,810 887,818 876,826" fill="#1f8a1f"/>
+<polygon points="900,810 889,818 900,826" fill="#1f8a1f"/>
+<text x="888" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1.OG/221</text>
+<text x="888" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="888" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/5</text>
+<line x1="902" y1="818" x2="1012" y2="818" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="1013" y1="805" x2="1039" y2="831"/>
+<line x1="1013" y1="831" x2="1039" y2="805"/>
+</g>
+<polygon points="1014,810 1025,818 1014,826" fill="#1f8a1f"/>
+<polygon points="1038,810 1027,818 1038,826" fill="#1f8a1f"/>
+<text x="1026" y="786" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2.OG/322</text>
+<text x="1026" y="800" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="1026" y="842" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >11/6</text>
+<text x="165.0" y="892" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >6b</text>
+<text x="231.0" y="892" font-size="12" fill="#1a1a1a" text-anchor="middle" font-weight="normal" >5</text>
+<line x1="130" y1="857.0" x2="262" y2="857.0" stroke="#1a1a1a" stroke-width="0.6"/>
+<line x1="262" y1="888" x2="322" y2="888" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="323" y1="875" x2="349" y2="901"/>
+<line x1="323" y1="901" x2="349" y2="875"/>
+</g>
+<polygon points="324,880 335,888 324,896" fill="#1f8a1f"/>
+<polygon points="348,880 337,888 348,896" fill="#1f8a1f"/>
+<text x="336" y="856" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/121</text>
+<text x="336" y="870" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >RZ</text>
+<text x="336" y="912" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >12/1</text>
+<line x1="350" y1="888" x2="460" y2="888" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="461" y1="875" x2="487" y2="901"/>
+<line x1="461" y1="901" x2="487" y2="875"/>
+</g>
+<polygon points="462,880 473,888 462,896" fill="#1f8a1f"/>
+<polygon points="486,880 475,888 486,896" fill="#1f8a1f"/>
+<text x="474" y="856" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >EG/121</text>
+<text x="474" y="870" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="474" y="912" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >12/2</text>
+<line x1="488" y1="888" x2="598" y2="888" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="599" y1="875" x2="625" y2="901"/>
+<line x1="599" y1="901" x2="625" y2="875"/>
+</g>
+<polygon points="600,880 611,888 600,896" fill="#1f8a1f"/>
+<polygon points="624,880 613,888 624,896" fill="#1f8a1f"/>
+<text x="612" y="856" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >1.OG/222</text>
+<text x="612" y="870" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="612" y="912" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >12/3</text>
+<line x1="626" y1="888" x2="736" y2="888" stroke="#1f8a1f" stroke-width="1.3"/>
+<g stroke="#1f8a1f" stroke-width="1.6">
+<line x1="737" y1="875" x2="763" y2="901"/>
+<line x1="737" y1="901" x2="763" y2="875"/>
+</g>
+<polygon points="738,880 749,888 738,896" fill="#1f8a1f"/>
+<polygon points="762,880 751,888 762,896" fill="#1f8a1f"/>
+<text x="750" y="856" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >2.OG/322</text>
+<text x="750" y="870" font-size="11" fill="#1f8a1f" text-anchor="middle" font-weight="bold" >SL</text>
+<text x="750" y="912" font-size="10.5" fill="#1f8a1f" text-anchor="middle" font-weight="normal" >12/4</text>
+<text x="336" y="938" font-size="11" fill="#1f8a1f" text-anchor="start" font-weight="normal" >weitere Stromkreise 13/1 … 20/5 (1. OG / 2. OG) analog</text>
+<line x1="196.0" y1="922" x2="196.0" y2="948" stroke="#1a1a1a" stroke-width="1.6"/>
+<polygon points="191.0,932 201.0,932 196.0,922" fill="#1a1a1a"/>
+<text x="60" y="962" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Einspeisung 5 x 25 qmm von Zentralbatterie</text>
+<text x="60" y="980" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Einbau von externen DLS/3Ph-Bus-Modul in folgende Verteilungen:</text>
+<text x="60" y="998" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="normal" >UV 1.1, 1.2 / UV 2.1, 2.2 / UV 3.1, 3.2</text>
+<text x="60" y="1016" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Verdrahtung der Bus-Module mit IY(ST)Y 2x2x0,8</text>
+<text x="1170" y="120" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >B  Bereitschaftslicht</text>
+<text x="1170" y="139" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >D  Dauerlicht</text>
+<text x="1170" y="158" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >DL geschaltetes Dauerlicht</text>
+<text x="1170" y="177" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" ></text>
+<text x="1170" y="196" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >Alle RZ-Leuchten in Dauerlicht</text>
+<text x="1170" y="215" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" ></text>
+<text x="1170" y="234" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >Alle nicht gekennzeichneten</text>
+<text x="1170" y="253" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >Sicherheitsleuchten in</text>
+<text x="1170" y="272" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >geschaltetem Dauerlicht</text>
+<text x="1170" y="291" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >über EIB in Verbindung</text>
+<text x="1170" y="310" font-size="12.5" fill="#1f8a1f" text-anchor="start" font-weight="normal" >mit DLS-Modul.</text>
+<rect x="880" y="860" width="687" height="207" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.6"/>
+<line x1="880" y1="886" x2="1567" y2="886" stroke="#1a1a1a" stroke-width="1"/>
+<text x="910" y="877" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Index</text>
+<text x="1030" y="877" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Änderung</text>
+<text x="1210" y="877" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Name</text>
+<text x="1310" y="877" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Datum</text>
+<line x1="970" y1="860" x2="970" y2="886" stroke="#1a1a1a" stroke-width="0.7"/>
+<line x1="1190" y1="860" x2="1190" y2="886" stroke="#1a1a1a" stroke-width="0.7"/>
+<line x1="1290" y1="860" x2="1290" y2="886" stroke="#1a1a1a" stroke-width="0.7"/>
+<line x1="1380" y1="860" x2="1380" y2="940" stroke="#1a1a1a" stroke-width="1"/>
+<text x="1385" y="902" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="bold" >«Elektrofirma»</text>
+<text x="1385" y="918" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Meisterbetrieb</text>
+<text x="1385" y="932" font-size="9.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >«Straße · PLZ Ort · Tel.»</text>
+<line x1="880" y1="940" x2="1567" y2="940" stroke="#1a1a1a" stroke-width="1"/>
+<text x="888" y="900" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Bauherr:</text>
+<text x="888" y="918" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="bold" >«Bauherr / Auftraggeber»</text>
+<text x="888" y="955" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Objekt:</text>
+<text x="888" y="973" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="bold" >«Bauvorhaben, Straße, Ort»</text>
+<line x1="880" y1="984" x2="1567" y2="984" stroke="#1a1a1a" stroke-width="1"/>
+<text x="888" y="999" font-size="10" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Darstellung:</text>
+<text x="888" y="1017" font-size="13" fill="#1a1a1a" text-anchor="start" font-weight="bold" >Übersichtsplan Elektrotechnik</text>
+<text x="888" y="1035" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Sicherheitsbeleuchtung – E30-Unterstation</text>
+<line x1="1260" y1="984" x2="1260" y2="1067" stroke="#1a1a1a" stroke-width="1"/>
+<text x="1268" y="999" font-size="10.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Projekt-Id.-Nr.: «0000-00.0»</text>
+<text x="1268" y="1017" font-size="10.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Maßstab: o. M.</text>
+<text x="1268" y="1035" font-size="10.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Bl.-Nr.: 006A</text>
+<line x1="880" y1="1045" x2="1567" y2="1045" stroke="#1a1a1a" stroke-width="1"/>
+<text x="888" y="1061" font-size="10.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Zeichnungs-Nr.: «731.00 – 01 – A – EL – 8 – 006A / 03»</text>
+<text x="1268" y="1061" font-size="10.5" fill="#1a1a1a" text-anchor="start" font-weight="normal" >Planer/Datum: «Name» / 05.07.2026</text>
+</svg>
