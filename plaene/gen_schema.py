@@ -36,14 +36,18 @@ def txt(x, y, t, size=11, fill=BK, anchor="middle", weight="normal", extra=""):
     t = (t.replace("&","&amp;").replace("<","&lt;"))
     s.append(f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" text-anchor="{anchor}" font-weight="{weight}" {extra}>{t}</text>')
 
-def leuchte(cx, cy):
-    # X-Kreuz mit gefülltem "Doppeldreieck" (Bowtie) – wie Vorlage
-    s.append(f'<g stroke="{G}" stroke-width="1.6">')
-    s.append(f'<line x1="{cx-13}" y1="{cy-13}" x2="{cx+13}" y2="{cy+13}"/>')
-    s.append(f'<line x1="{cx-13}" y1="{cy+13}" x2="{cx+13}" y2="{cy-13}"/>')
-    s.append('</g>')
-    s.append(f'<polygon points="{cx-12},{cy-8} {cx-1},{cy} {cx-12},{cy+8}" fill="{G}"/>')
-    s.append(f'<polygon points="{cx+12},{cy-8} {cx+1},{cy} {cx+12},{cy+8}" fill="{G}"/>')
+def leuchte(cx, cy, typ):
+    if typ == "RZ":
+        # Rettungszeichenleuchte: gefülltes Doppeldreieck (Bowtie), ohne Kreuz
+        s.append(f'<polygon points="{cx-13},{cy-10} {cx-13},{cy+10} {cx},{cy}" fill="{G}"/>')
+        s.append(f'<polygon points="{cx+13},{cy-10} {cx+13},{cy+10} {cx},{cy}" fill="{G}"/>')
+    else:
+        # Sicherheitsleuchte: X-Kreuz mit gefülltem Quadrat in der Mitte
+        s.append(f'<g stroke="{G}" stroke-width="1.8">')
+        s.append(f'<line x1="{cx-15}" y1="{cy-15}" x2="{cx+15}" y2="{cy+15}"/>')
+        s.append(f'<line x1="{cx-15}" y1="{cy+15}" x2="{cx+15}" y2="{cy-15}"/>')
+        s.append('</g>')
+        s.append(f'<rect x="{cx-7}" y="{cy-7}" width="14" height="14" fill="{G}"/>')
 
 # ---------------- Unterstation-Tabelle ----------------
 tab_top, tab_bot = Y0 - 40, Y0 + (len(rows)-1)*DY + 34
@@ -65,12 +69,12 @@ for i, (baugr, dsl, chain) in enumerate(rows):
     prev = TX3
     for j, (raum, typ, nr) in enumerate(chain):
         cx = X0 + j*DX
-        s.append(f'<line x1="{prev}" y1="{y}" x2="{cx-14}" y2="{y}" stroke="{G}" stroke-width="1.3"/>')
-        leuchte(cx, y)
+        s.append(f'<line x1="{prev}" y1="{y}" x2="{cx-15}" y2="{y}" stroke="{G}" stroke-width="1.3"/>')
+        leuchte(cx, y, typ)
         txt(cx, y-32, raum, 10.5, G)
         txt(cx, y-18, typ, 11, G, "middle", "bold")
         txt(cx, y+24, nr, 10.5, G)
-        prev = cx + 14
+        prev = cx + 15
 
 txt(X0, Y0 + (len(rows)-1)*DY + 50, "weitere Stromkreise 13/1 … 20/5 (1. OG / 2. OG) analog", 11, G, "start")
 
