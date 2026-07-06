@@ -1,0 +1,453 @@
+<title>Übersichtsplan-Editor Sicherheitsbeleuchtung</title>
+<style>
+  :root{
+    --bg:#e9e9e2; --panel:#f7f7f2; --ink:#26261f; --muted:#6e6e62;
+    --line:#c8c8bd; --accent:#1f7a2f; --accent-ink:#ffffff; --sel:#1462c4;
+    --btn:#ffffff; --btn-active:#1f7a2f; --btn-active-ink:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#1c1d19; --panel:#262721; --ink:#e7e7dd; --muted:#9a9a8c;
+      --line:#3c3d35; --accent:#4fae5c; --accent-ink:#10230f; --sel:#5aa0f0;
+      --btn:#31322b; --btn-active:#4fae5c; --btn-active-ink:#10230f; }
+  }
+  :root[data-theme="light"]{ --bg:#e9e9e2; --panel:#f7f7f2; --ink:#26261f; --muted:#6e6e62;
+      --line:#c8c8bd; --accent:#1f7a2f; --accent-ink:#ffffff; --sel:#1462c4;
+      --btn:#ffffff; --btn-active:#1f7a2f; --btn-active-ink:#ffffff; }
+  :root[data-theme="dark"]{ --bg:#1c1d19; --panel:#262721; --ink:#e7e7dd; --muted:#9a9a8c;
+      --line:#3c3d35; --accent:#4fae5c; --accent-ink:#10230f; --sel:#5aa0f0;
+      --btn:#31322b; --btn-active:#4fae5c; --btn-active-ink:#10230f; }
+
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font:14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .chrome{ position:sticky; top:0; z-index:5; background:var(--panel);
+           border-bottom:1px solid var(--line); padding:8px 12px;
+           display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .chrome .brand{ font-weight:600; margin-right:10px; letter-spacing:.2px; }
+  .chrome .sep{ width:1px; align-self:stretch; background:var(--line); margin:0 4px; }
+  button{ font:inherit; background:var(--btn); color:var(--ink);
+          border:1px solid var(--line); border-radius:6px; padding:5px 11px; cursor:pointer; }
+  button:hover{ border-color:var(--accent); }
+  button:focus-visible{ outline:2px solid var(--sel); outline-offset:1px; }
+  button.tool.active{ background:var(--btn-active); color:var(--btn-active-ink);
+                      border-color:var(--btn-active); }
+  label.small{ color:var(--muted); font-size:12.5px; display:flex; gap:5px; align-items:center; }
+  .hint{ width:100%; color:var(--muted); font-size:12.5px; }
+
+  .work{ display:flex; gap:12px; padding:12px; align-items:flex-start; }
+  .stage{ flex:1; overflow:auto; background:var(--panel); border:1px solid var(--line);
+          border-radius:8px; padding:14px; }
+  #sheet{ display:block; margin:0 auto; background:#fdfdf8;
+          box-shadow:0 1px 8px rgba(0,0,0,.18); touch-action:none; }
+
+  .side{ width:280px; flex:none; display:flex; flex-direction:column; gap:10px; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .card h3{ margin:0 0 8px; font-size:13px; text-transform:uppercase;
+            letter-spacing:.6px; color:var(--muted); font-weight:600; }
+  .card .row{ display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+  .card input, .card select{ font:inherit; padding:4px 7px; border:1px solid var(--line);
+       border-radius:5px; background:var(--btn); color:var(--ink); width:100%; }
+  .card input:focus-visible, .card select:focus-visible{ outline:2px solid var(--sel); }
+  .card .lbl{ font-size:12px; color:var(--muted); }
+  details summary{ cursor:pointer; font-weight:600; }
+  details .card-inner{ margin-top:8px; }
+  .danger{ color:#a33; }
+
+  @media print{
+    .chrome, .side, .hint{ display:none !important; }
+    body{ background:#fff; }
+    .work{ padding:0; } .stage{ border:none; padding:0; overflow:visible; }
+    #sheet{ box-shadow:none; width:420mm !important; height:288.75mm !important; }
+    .screen-only{ display:none !important; }
+    @page{ size:A3 landscape; margin:0; }
+  }
+</style>
+
+<div class="chrome">
+  <span class="brand">Übersichtsplan-Editor</span>
+  <button class="tool" data-tool="select" title="Auswählen und Verschieben (V)">Auswählen</button>
+  <button class="tool" data-tool="sl" title="Sicherheitsleuchte setzen (S)">SL ⊠</button>
+  <button class="tool" data-tool="rz" title="Rettungszeichenleuchte setzen (R)">RZ ▶◀</button>
+  <button class="tool" data-tool="line" title="Linie zeichnen: Klick Anfang, Klick Ende (L)">Linie</button>
+  <button class="tool" data-tool="text" title="Freien Text setzen (T)">Text</button>
+  <button class="tool" data-tool="erase" title="Element durch Anklicken löschen (E)">Löschen</button>
+  <span class="sep"></span>
+  <button id="undoBtn" title="Rückgängig (Strg+Z)">↶ Rückgängig</button>
+  <label class="small"><input type="checkbox" id="gridChk" checked> Raster</label>
+  <label class="small">Zoom <input type="range" id="zoom" min="50" max="160" value="90" style="width:90px"></label>
+  <span class="sep"></span>
+  <button id="svgBtn">SVG herunterladen</button>
+  <button id="jsonBtn">Speichern (JSON)</button>
+  <button id="loadBtn">Laden (JSON)</button>
+  <input type="file" id="loadFile" accept=".json" hidden>
+  <button id="printBtn">Drucken / PDF</button>
+  <span class="sep"></span>
+  <button id="clearBtn" class="danger">Blatt leeren</button>
+  <div class="hint" id="hint">Werkzeug wählen und ins Blatt klicken. Doppelklick auf ein Symbol = beschriften ·
+    Doppelklick auf Tabellenzelle = Baugruppen-/DSL-Nr. ändern · Entf = Auswahl löschen · Esc = Linie abbrechen.</div>
+</div>
+
+<div class="work">
+  <div class="stage"><svg id="sheet" viewBox="0 0 1600 1100" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="side">
+    <div class="card" id="selCard" hidden>
+      <h3>Ausgewähltes Element</h3>
+      <div id="selBody"></div>
+    </div>
+    <div class="card">
+      <details open>
+        <summary>Schriftfeld</summary>
+        <div class="card-inner" id="metaBody"></div>
+      </details>
+    </div>
+    <div class="card">
+      <details>
+        <summary>Tabelle / Stromkreise</summary>
+        <div class="card-inner">
+          <div class="row"><span class="lbl">Anzahl Zeilen (Baugruppen)</span>
+            <input type="number" id="rowCount" min="2" max="16" step="2"></div>
+          <div class="lbl">Zellen (1a, DSL-Nr. …) per Doppelklick im Blatt ändern.</div>
+        </div>
+      </details>
+    </div>
+    <div class="card">
+      <details>
+        <summary>Hilfe</summary>
+        <div class="card-inner lbl">
+          <b>SL / RZ:</b> Werkzeug wählen, ins Blatt klicken – das Symbol rastet am Raster ein.
+          Danach im Feld „Ausgewähltes Element" Raum und Leuchten-Nr. eintragen.<br><br>
+          <b>Linie:</b> erster Klick = Anfang, zweiter Klick = Ende. Endet die Linie nahe einem
+          Symbol, dockt sie an dessen Rand an. Esc bricht ab.<br><br>
+          <b>Verschieben:</b> „Auswählen" aktivieren und Symbole/Texte ziehen.
+          Bei Linien lassen sich die Endpunkte (blaue Griffe) ziehen.<br><br>
+          <b>Drucken:</b> erzeugt ein A3-Querformat; im Druckdialog „Als PDF speichern" wählen.
+          Alles wird automatisch im Browser gespeichert.
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const G="#1f8a1f", BK="#1a1a1a", SEL="#1462c4";
+const SVGNS="http://www.w3.org/2000/svg";
+const sheet=document.getElementById("sheet");
+const W=1600,H=1100, GRID=10;
+const TX1=130,TX2=200,TX3=262, Y0=118, DY=70;
+
+/* ---------------- Zustand ---------------- */
+function defaultState(){
+  const heute=new Date().toLocaleDateString("de-DE");
+  return {
+    meta:{ bauherr:"Bauherr / Auftraggeber", objekt:"Bauvorhaben, Straße, Ort",
+      firma:"Elektrofirma", firma2:"Meisterbetrieb · Straße · PLZ Ort · Tel.",
+      darst1:"Übersichtsplan Elektrotechnik", darst2:"Sicherheitsbeleuchtung – E30-Unterstation",
+      projekt:"0000-00.0", blatt:"001", znr:"731.00 – 01 – A – EL – 8", planer:"Name / "+heute,
+      station:"E30 Unterstation",
+      feed:["Einspeisung 5 x 25 qmm von Zentralbatterie",
+            "Einbau von externen DLS/3Ph-Bus-Modul in folgende Verteilungen:",
+            "UV 1.1, 1.2 / UV 2.1, 2.2 / UV 3.1, 3.2",
+            "Verdrahtung der Bus-Module mit IY(ST)Y 2x2x0,8"].join("\n"),
+      legende:["B  Bereitschaftslicht","D  Dauerlicht","DL geschaltetes Dauerlicht","",
+               "Alle RZ-Leuchten in Dauerlicht","","Alle nicht gekennzeichneten",
+               "Sicherheitsleuchten in","geschaltetem Dauerlicht","über EIB in Verbindung",
+               "mit DLS-Modul."].join("\n") },
+    rows:Array.from({length:12},(_,i)=>({ baugr:(Math.floor(i/2)+1)+(i%2?"b":"a"), dsl:"" })),
+    symbols:[], lines:[], texts:[], seq:1 };
+}
+let state, undoStack=[];
+try{ state=JSON.parse(localStorage.getItem("planEditor")||"null"); }catch(e){ state=null; }
+if(!state || !state.meta) state=defaultState();
+
+function save(){ localStorage.setItem("planEditor", JSON.stringify(state)); }
+function pushUndo(){ undoStack.push(JSON.stringify(state)); if(undoStack.length>60) undoStack.shift(); }
+function undo(){ const s=undoStack.pop(); if(s){ state=JSON.parse(s); selection=null; render(); save(); } }
+
+/* ---------------- Werkzeuge ---------------- */
+let tool="select", selection=null, lineStart=null, drag=null;
+const toolBtns=[...document.querySelectorAll(".tool")];
+function setTool(t){ tool=t; lineStart=null;
+  toolBtns.forEach(b=>b.classList.toggle("active", b.dataset.tool===t)); render(); }
+toolBtns.forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
+setTool("select");
+
+/* ---------------- SVG-Helfer ---------------- */
+function el(name,attrs,parent){ const n=document.createElementNS(SVGNS,name);
+  for(const k in attrs) n.setAttribute(k,attrs[k]); (parent||sheet).appendChild(n); return n; }
+function txt(parent,x,y,t,size,fill,anchor,weight,extra){
+  const n=el("text",Object.assign({x,y,"font-size":size,fill:fill||BK,
+    "text-anchor":anchor||"middle","font-family":"Courier New, Courier, monospace",
+    "font-weight":weight||"normal"},extra||{}),parent);
+  n.textContent=t; return n; }
+function snap(v){ return Math.round(v/GRID)*GRID; }
+function pt(evt){ const p=sheet.createSVGPoint(); p.x=evt.clientX; p.y=evt.clientY;
+  return p.matrixTransform(sheet.getScreenCTM().inverse()); }
+
+/* ---------------- Symbol-Zeichnung ---------------- */
+function drawSymbol(g,s){
+  if(s.typ==="RZ"){
+    el("polygon",{points:`${s.x-13},${s.y-10} ${s.x-13},${s.y+10} ${s.x},${s.y}`,fill:G},g);
+    el("polygon",{points:`${s.x+13},${s.y-10} ${s.x+13},${s.y+10} ${s.x},${s.y}`,fill:G},g);
+  }else{
+    el("line",{x1:s.x-15,y1:s.y-15,x2:s.x+15,y2:s.y+15,stroke:G,"stroke-width":1.8},g);
+    el("line",{x1:s.x-15,y1:s.y+15,x2:s.x+15,y2:s.y-15,stroke:G,"stroke-width":1.8},g);
+    el("rect",{x:s.x-7,y:s.y-7,width:14,height:14,fill:G},g);
+  }
+  if(s.raum) txt(g,s.x,s.y-32,s.raum,10.5,G);
+  txt(g,s.x,s.y-18,s.typ,11,G,"middle","bold");
+  if(s.nr) txt(g,s.x,s.y+24,s.nr,10.5,G);
+}
+
+/* ---------------- Blatt rendern ---------------- */
+function render(){
+  sheet.replaceChildren();
+  el("rect",{x:0,y:0,width:W,height:H,fill:"#fdfdf8"});
+  // Raster (nur Bildschirm)
+  if(document.getElementById("gridChk").checked){
+    const gg=el("g",{class:"screen-only"});
+    for(let x=40;x<W-30;x+=GRID*4) for(let y=40;y<H-30;y+=GRID*4)
+      el("circle",{cx:x,cy:y,r:.7,fill:"#b9c9b9"},gg);
+  }
+  el("rect",{x:25,y:25,width:W-50,height:H-50,fill:"none",stroke:BK,"stroke-width":2});
+  el("rect",{x:33,y:33,width:W-66,height:H-66,fill:"none",stroke:BK,"stroke-width":.8});
+
+  // ---- Unterstation-Tabelle ----
+  const rows=state.rows, tabTop=Y0-40, tabBot=Y0+(rows.length-1)*DY+34;
+  el("rect",{x:TX1,y:tabTop,width:TX3-TX1,height:tabBot-tabTop,fill:"none",stroke:BK,"stroke-width":1.4});
+  el("line",{x1:TX2,y1:tabTop,x2:TX2,y2:tabBot,stroke:BK,"stroke-width":.9});
+  el("line",{x1:TX1,y1:tabTop+28,x2:TX3,y2:tabTop+28,stroke:BK,"stroke-width":.9});
+  txt(sheet,(TX1+TX2)/2,tabTop+13,"Baugr.-",9.5); txt(sheet,(TX1+TX2)/2,tabTop+24,"Nr.",9.5);
+  txt(sheet,(TX2+TX3)/2,tabTop+13,"DSL/3Ph",9.5); txt(sheet,(TX2+TX3)/2,tabTop+24,"-Nr.",9.5);
+  txt(sheet,105,(tabTop+tabBot)/2,state.meta.station,15,BK,"middle","bold",
+      {transform:`rotate(-90 105 ${(tabTop+tabBot)/2})`,"letter-spacing":3});
+  rows.forEach((r,i)=>{
+    const y=Y0+i*DY;
+    const c1=txt(sheet,(TX1+TX2)/2,y+4,r.baugr,12); c1.dataset.cell="baugr:"+i; c1.style.cursor="text";
+    const c2=txt(sheet,(TX2+TX3)/2,y+4,r.dsl,12);   c2.dataset.cell="dsl:"+i;
+    // unsichtbare Klickfläche für leere DSL-Zellen
+    const hit=el("rect",{x:TX2,y:y-14,width:TX3-TX2,height:28,fill:"transparent"});
+    hit.dataset.cell="dsl:"+i; hit.style.cursor="text";
+    if(i) el("line",{x1:TX1,y1:y-DY/2+4,x2:TX3,y2:y-DY/2+4,stroke:BK,"stroke-width":.6});
+  });
+  // Einspeisungspfeil
+  const mid=(TX1+TX3)/2;
+  el("line",{x1:mid,y1:tabBot,x2:mid,y2:tabBot+26,stroke:BK,"stroke-width":1.6});
+  el("polygon",{points:`${mid-5},${tabBot+10} ${mid+5},${tabBot+10} ${mid},${tabBot}`,fill:BK});
+  state.meta.feed.split("\n").forEach((l,k)=>txt(sheet,60,962+k*18,l,12,BK,"start"));
+  state.meta.legende.split("\n").forEach((l,k)=>txt(sheet,1170,120+k*19,l,12.5,G,"start"));
+
+  // ---- Schriftfeld ----
+  const bx=880,by=860,bw=687,bh=207,bx2=bx+bw,by2=by+bh, m=state.meta;
+  el("rect",{x:bx,y:by,width:bw,height:bh,fill:"#ffffff",stroke:BK,"stroke-width":1.6});
+  el("line",{x1:bx,y1:by+26,x2:bx2,y2:by+26,stroke:BK,"stroke-width":1});
+  [[bx+30,"Index"],[bx+150,"Änderung"],[bx+330,"Name"],[bx+430,"Datum"]]
+    .forEach(([x,t])=>txt(sheet,x,by+17,t,10,BK,"start"));
+  [90,310,410].forEach(dx=>el("line",{x1:bx+dx,y1:by,x2:bx+dx,y2:by+26,stroke:BK,"stroke-width":.7}));
+  el("line",{x1:bx+500,y1:by+26,x2:bx+500,y2:by+80,stroke:BK,"stroke-width":1});
+  txt(sheet,bx+505,by+48,m.firma,12,BK,"start","bold");
+  txt(sheet,bx+505,by+66,m.firma2,8.5,BK,"start");
+  el("line",{x1:bx,y1:by+80,x2:bx2,y2:by+80,stroke:BK,"stroke-width":1});
+  txt(sheet,bx+8,by+42,"Bauherr:",10,BK,"start");
+  txt(sheet,bx+8,by+62,m.bauherr,12,BK,"start","bold");
+  txt(sheet,bx+8,by+97,"Objekt:",10,BK,"start");
+  txt(sheet,bx+8,by+115,m.objekt,12,BK,"start","bold");
+  el("line",{x1:bx,y1:by+124,x2:bx2,y2:by+124,stroke:BK,"stroke-width":1});
+  txt(sheet,bx+8,by+139,"Darstellung:",10,BK,"start");
+  txt(sheet,bx+8,by+157,m.darst1,13,BK,"start","bold");
+  txt(sheet,bx+8,by+175,m.darst2,12,BK,"start");
+  el("line",{x1:bx+380,y1:by+124,x2:bx+380,y2:by2,stroke:BK,"stroke-width":1});
+  txt(sheet,bx+388,by+139,"Projekt-Id.-Nr.: "+m.projekt,10.5,BK,"start");
+  txt(sheet,bx+388,by+157,"Maßstab: o. M.",10.5,BK,"start");
+  txt(sheet,bx+388,by+175,"Bl.-Nr.: "+m.blatt,10.5,BK,"start");
+  el("line",{x1:bx,y1:by+185,x2:bx2,y2:by+185,stroke:BK,"stroke-width":1});
+  txt(sheet,bx+8,by+201,"Zeichnungs-Nr.: "+m.znr,10.5,BK,"start");
+  txt(sheet,bx+388,by+201,"Planer/Datum: "+m.planer,10.5,BK,"start");
+
+  // ---- Nutzerelemente ----
+  state.lines.forEach(l=>{
+    const g=el("g",{}); g.dataset.id=l.id;
+    el("line",{x1:l.x1,y1:l.y1,x2:l.x2,y2:l.y2,stroke:G,"stroke-width":1.3},g);
+    el("line",{x1:l.x1,y1:l.y1,x2:l.x2,y2:l.y2,stroke:"transparent","stroke-width":10},g);
+  });
+  state.symbols.forEach(sy=>{
+    const g=el("g",{}); g.dataset.id=sy.id; g.style.cursor="move"; drawSymbol(g,sy);
+    el("rect",{x:sy.x-20,y:sy.y-42,width:40,height:76,fill:"transparent"},g);
+  });
+  state.texts.forEach(t=>{
+    const g=el("g",{}); g.dataset.id=t.id; g.style.cursor="move";
+    txt(g,t.x,t.y,t.text,12,G,"start");
+  });
+
+  // ---- Auswahl-Markierung ----
+  if(selection){
+    const gg=el("g",{class:"screen-only"});
+    const o=findObj(selection);
+    if(o&&o.kind==="symbol") el("rect",{x:o.obj.x-24,y:o.obj.y-46,width:48,height:80,fill:"none",
+        stroke:SEL,"stroke-width":1.2,"stroke-dasharray":"4 3"},gg);
+    if(o&&o.kind==="text"){ const w=o.obj.text.length*7.3+10;
+      el("rect",{x:o.obj.x-5,y:o.obj.y-14,width:w,height:20,fill:"none",
+        stroke:SEL,"stroke-width":1.2,"stroke-dasharray":"4 3"},gg); }
+    if(o&&o.kind==="line"){
+      [["x1","y1","a"],["x2","y2","b"]].forEach(([kx,ky,end])=>{
+        const h=el("circle",{cx:o.obj[kx],cy:o.obj[ky],r:6,fill:"#fff",stroke:SEL,"stroke-width":2},gg);
+        h.dataset.handle=end; h.style.cursor="grab"; });
+    }
+  }
+  updatePanel();
+}
+
+function findObj(id){
+  let o=state.symbols.find(s=>s.id===id); if(o) return {kind:"symbol",obj:o,arr:state.symbols};
+  o=state.lines.find(s=>s.id===id);       if(o) return {kind:"line",obj:o,arr:state.lines};
+  o=state.texts.find(s=>s.id===id);       if(o) return {kind:"text",obj:o,arr:state.texts};
+  return null;
+}
+function nearestSymbolEdge(x,y){
+  for(const s of state.symbols){
+    const d=Math.hypot(s.x-x,s.y-y);
+    if(d<28){ const a=Math.atan2(y-s.y,x-s.x);
+      return {x:s.x+Math.cos(a)*15,y:s.y+Math.sin(a)*15}; }
+  } return null;
+}
+
+/* ---------------- Interaktion ---------------- */
+sheet.addEventListener("pointerdown",e=>{
+  const p=pt(e), hit=e.target.closest("[data-id]"), id=hit?hit.dataset.id:null;
+  if(e.target.dataset.handle && selection){
+    const o=findObj(selection); pushUndo();
+    drag={kind:"handle",end:e.target.dataset.handle,obj:o.obj}; sheet.setPointerCapture(e.pointerId); return;
+  }
+  if(tool==="select"){
+    if(id){ selection=id; const o=findObj(id);
+      if(o.kind!=="line"){ pushUndo();
+        drag={kind:"move",obj:o.obj,dx:o.obj.x-p.x,dy:o.obj.y-p.y}; sheet.setPointerCapture(e.pointerId); }
+      render();
+    } else { selection=null; render(); }
+    return;
+  }
+  if(tool==="erase"){ if(id){ pushUndo(); const o=findObj(id);
+      o.arr.splice(o.arr.indexOf(o.obj),1); if(selection===id)selection=null; render(); save(); } return; }
+  if(tool==="sl"||tool==="rz"){ pushUndo();
+    const sy={id:"n"+(state.seq++),x:snap(p.x),y:snap(p.y),typ:tool.toUpperCase(),raum:"",nr:""};
+    state.symbols.push(sy); selection=sy.id; render(); save();
+    const inp=document.getElementById("f_raum"); if(inp) inp.focus(); return; }
+  if(tool==="text"){ const t=prompt("Text:",""); if(t){ pushUndo();
+      state.texts.push({id:"n"+(state.seq++),x:snap(p.x),y:snap(p.y),text:t}); render(); save(); } return; }
+  if(tool==="line"){
+    const dock=nearestSymbolEdge(p.x,p.y)||{x:snap(p.x),y:snap(p.y)};
+    if(!lineStart){ lineStart=dock; render(); drawPreview(dock,dock); }
+    else{ pushUndo();
+      state.lines.push({id:"n"+(state.seq++),x1:lineStart.x,y1:lineStart.y,x2:dock.x,y2:dock.y});
+      lineStart=null; render(); save(); }
+    return; }
+});
+let preview=null;
+function drawPreview(a,b){ if(preview)preview.remove();
+  preview=el("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:SEL,"stroke-width":1.3,
+    "stroke-dasharray":"5 4",class:"screen-only"}); }
+sheet.addEventListener("pointermove",e=>{
+  const p=pt(e);
+  if(drag){ if(drag.kind==="move"){ drag.obj.x=snap(p.x+drag.dx); drag.obj.y=snap(p.y+drag.dy); }
+    else if(drag.kind==="handle"){ const d=nearestSymbolEdge(p.x,p.y)||{x:snap(p.x),y:snap(p.y)};
+      if(drag.end==="a"){ drag.obj.x1=d.x; drag.obj.y1=d.y; } else { drag.obj.x2=d.x; drag.obj.y2=d.y; } }
+    render(); return; }
+  if(tool==="line"&&lineStart){ const d=nearestSymbolEdge(p.x,p.y)||{x:snap(p.x),y:snap(p.y)};
+    drawPreview(lineStart,d); }
+});
+sheet.addEventListener("pointerup",()=>{ if(drag){ drag=null; save(); } });
+sheet.addEventListener("dblclick",e=>{
+  const cell=e.target.dataset.cell;
+  if(cell){ const [k,i]=cell.split(":"); const v=prompt(k==="baugr"?"Baugruppen-Nr.:":"DSL/3Ph-Nr.:",
+      state.rows[i][k]); if(v!==null){ pushUndo(); state.rows[i][k]=v; render(); save(); } return; }
+  const hit=e.target.closest("[data-id]");
+  if(hit){ selection=hit.dataset.id; render();
+    const o=findObj(selection);
+    if(o.kind==="text"){ const v=prompt("Text:",o.obj.text);
+      if(v!==null){ pushUndo(); o.obj.text=v; render(); save(); } }
+    else if(o.kind==="symbol"){ const inp=document.getElementById("f_raum"); if(inp) inp.focus(); } }
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.matches("input,textarea,select")) return;
+  if(e.key==="Escape"){ lineStart=null; if(preview)preview.remove(); preview=null; render(); }
+  if((e.key==="Delete"||e.key==="Backspace")&&selection){ pushUndo();
+    const o=findObj(selection); if(o){ o.arr.splice(o.arr.indexOf(o.obj),1); } selection=null; render(); save(); }
+  if(e.ctrlKey&&e.key.toLowerCase()==="z"){ e.preventDefault(); undo(); }
+  const map={v:"select",s:"sl",r:"rz",l:"line",t:"text",e:"erase"};
+  if(map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
+});
+
+/* ---------------- Seitenpanel ---------------- */
+function updatePanel(){
+  const card=document.getElementById("selCard"), body=document.getElementById("selBody");
+  const o=selection?findObj(selection):null;
+  if(!o){ card.hidden=true; body.replaceChildren(); return; }
+  card.hidden=false; body.replaceChildren();
+  if(o.kind==="symbol"){
+    body.innerHTML=
+      '<div class="row"><span class="lbl">Typ</span><select id="f_typ">'+
+      '<option value="SL"'+(o.obj.typ==="SL"?" selected":"")+'>SL – Sicherheitsleuchte</option>'+
+      '<option value="RZ"'+(o.obj.typ==="RZ"?" selected":"")+'>RZ – Rettungszeichenleuchte</option></select></div>'+
+      '<div class="row"><span class="lbl">Raum (z. B. EG/113)</span><input id="f_raum" value="'+esc(o.obj.raum)+'"></div>'+
+      '<div class="row"><span class="lbl">Leuchten-Nr. (z. B. 5/1)</span><input id="f_nr" value="'+esc(o.obj.nr)+'"></div>';
+    body.querySelector("#f_typ").onchange=e=>{ pushUndo(); o.obj.typ=e.target.value; render(); save(); };
+    body.querySelector("#f_raum").oninput=e=>{ o.obj.raum=e.target.value; render(); save(); };
+    body.querySelector("#f_nr").oninput=e=>{ o.obj.nr=e.target.value; render(); save(); };
+  } else if(o.kind==="text"){
+    body.innerHTML='<div class="row"><span class="lbl">Text</span><input id="f_txt" value="'+esc(o.obj.text)+'"></div>';
+    body.querySelector("#f_txt").oninput=e=>{ o.obj.text=e.target.value; render(); save(); };
+  } else {
+    body.innerHTML='<div class="lbl">Linie – Endpunkte (blaue Griffe) ziehen oder mit Entf löschen.</div>';
+  }
+}
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+
+const metaFields=[["bauherr","Bauherr"],["objekt","Objekt"],["firma","Firma"],
+  ["firma2","Firma – Zusatz"],["darst1","Darstellung Zeile 1"],["darst2","Darstellung Zeile 2"],
+  ["projekt","Projekt-Id.-Nr."],["blatt","Bl.-Nr."],["znr","Zeichnungs-Nr."],
+  ["planer","Planer / Datum"],["station","Bezeichnung Station"]];
+const metaBody=document.getElementById("metaBody");
+metaFields.forEach(([k,label])=>{
+  const d=document.createElement("div"); d.className="row";
+  d.innerHTML='<span class="lbl">'+label+'</span><input value="'+esc(state.meta[k])+'">';
+  d.querySelector("input").oninput=e=>{ state.meta[k]=e.target.value; render(); save(); };
+  metaBody.appendChild(d);
+});
+
+const rowCount=document.getElementById("rowCount");
+rowCount.value=state.rows.length;
+rowCount.onchange=()=>{ pushUndo(); const n=Math.max(2,Math.min(16,+rowCount.value||12));
+  const old=state.rows; state.rows=Array.from({length:n},(_,i)=>old[i]||
+    ({baugr:(Math.floor(i/2)+1)+(i%2?"b":"a"),dsl:""})); render(); save(); };
+
+/* ---------------- Aktionen ---------------- */
+document.getElementById("undoBtn").onclick=undo;
+document.getElementById("gridChk").onchange=render;
+document.getElementById("zoom").oninput=e=>{ sheet.style.width=(1600*e.target.value/100)+"px"; };
+sheet.style.width="1440px";
+document.getElementById("printBtn").onclick=()=>window.print();
+document.getElementById("clearBtn").onclick=()=>{
+  if(confirm("Wirklich alle Symbole, Linien und Texte entfernen?")){ pushUndo();
+    state.symbols=[]; state.lines=[]; state.texts=[]; selection=null; render(); save(); } };
+document.getElementById("svgBtn").onclick=()=>{
+  selection=null; render();
+  const clone=sheet.cloneNode(true);
+  clone.querySelectorAll(".screen-only").forEach(n=>n.remove());
+  clone.removeAttribute("style");
+  clone.setAttribute("width","1600"); clone.setAttribute("height","1100");
+  const blob=new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+clone.outerHTML],{type:"image/svg+xml"});
+  dl(blob,"uebersichtsplan.svg"); };
+document.getElementById("jsonBtn").onclick=()=>dl(new Blob([JSON.stringify(state,null,1)],
+  {type:"application/json"}),"uebersichtsplan.json");
+document.getElementById("loadBtn").onclick=()=>document.getElementById("loadFile").click();
+document.getElementById("loadFile").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ pushUndo(); state=JSON.parse(r.result); selection=null; render(); save(); }
+    catch(err){ alert("Datei konnte nicht gelesen werden."); } };
+  r.readAsText(f); e.target.value=""; };
+function dl(blob,name){ const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
+
+render();
+</script>
